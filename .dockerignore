@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+apps/api/src/generated
+.git
+.env
+.env.*
+_bmad
+_bmad-output
+.claude

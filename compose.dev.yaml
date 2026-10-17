@@ -1,0 +1,55 @@
+# Dev override: docker compose -f compose.yaml -f compose.dev.yaml up
+# Source is bind-mounted; node_modules live in named volumes (never from the host).
+
+services:
+  shared:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    image: restaurant-api:dev
+    command: ["pnpm", "--filter", "@restaurant/shared", "dev"]
+    volumes:
+      - .:/repo
+      - api-root-modules:/repo/node_modules
+      - api-shared-modules:/repo/packages/shared/node_modules
+    healthcheck:
+      test: ["CMD", "test", "-f", "/repo/packages/shared/dist/index.js"]
+      interval: 2s
+      retries: 60
+
+  api:
+    build:
+      target: dev
+    image: restaurant-api:dev
+    volumes:
+      - .:/repo
+      - api-root-modules:/repo/node_modules
+      - api-app-modules:/repo/apps/api/node_modules
+      - api-shared-modules:/repo/packages/shared/node_modules
+    depends_on:
+      shared:
+        condition: service_healthy
+    healthcheck:
+      start_period: 60s
+
+  web:
+    build:
+      target: dev
+    image: restaurant-web:dev
+    volumes:
+      - .:/repo
+      - web-root-modules:/repo/node_modules
+      - web-app-modules:/repo/apps/web/node_modules
+      - web-shared-modules:/repo/packages/shared/node_modules
+    depends_on:
+      shared:
+        condition: service_healthy
+
+volumes:
+  api-root-modules:
+  api-app-modules:
+  api-shared-modules:
+  web-root-modules:
+  web-app-modules:
+  web-shared-modules:

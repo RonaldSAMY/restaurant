@@ -1,0 +1,12 @@
+localhost {
+	tls internal
+
+	# Forwarded unmodified; the api owns the /api/v1 prefix.
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

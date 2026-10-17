@@ -1,0 +1,10 @@
+// Models arrive in Story 1.4. The connection URL lives in prisma.config.ts.
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
