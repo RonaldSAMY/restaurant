@@ -1,0 +1,556 @@
+<title>Restaurant Order Flows</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: kitchen-ticket rail — sticky flow tabs, a wide swim-lane sequence diagram, and a ticket-style step panel beside it (stacks on phones). */
+:root {
+  --bg: #F3F5F2;
+  --surface: #FFFFFF;
+  --fg: #1A1F1C;
+  --muted: #5D6A63;
+  --line: #CDD5CF;
+  --accent: #0E6F68;
+  --push: #8A4FB8;
+  --hot: #F2C14E;
+  --hot-ink: #3A2C05;
+  --err: #B5382C;
+  --st-received: #4F6D8F;
+  --st-preparing: #C27C12;
+  --st-ready: #2E8B4E;
+  --st-collected: #7A847E;
+  --display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --surface: #1A201D; --fg: #E4E9E5; --muted: #9AA8A0; --line: #34403A;
+    --accent: #4FC1B5; --push: #C49BE6; --hot: #E8B53C; --hot-ink: #241A00; --err: #F08A7E;
+    --st-received: #8FB0D6; --st-preparing: #E8A845; --st-ready: #6FCB8E; --st-collected: #A5AFA9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --surface: #1A201D; --fg: #E4E9E5; --muted: #9AA8A0; --line: #34403A;
+  --accent: #4FC1B5; --push: #C49BE6; --hot: #E8B53C; --hot-ink: #241A00; --err: #F08A7E;
+  --st-received: #8FB0D6; --st-preparing: #E8A845; --st-ready: #6FCB8E; --st-collected: #A5AFA9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.55;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap {
+  max-width: 1240px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+  display: grid; gap: 48px;
+}
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 4.5vw, 3rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; font-weight: 600; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+.eyebrow { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+header.intro { display: grid; gap: 14px; }
+.ticket-ref {
+  display: inline-flex; gap: 10px; align-items: center; font-family: var(--mono); font-size: 0.85rem;
+  border: 1px dashed var(--line); padding: 4px 10px; border-radius: 4px; width: fit-content; color: var(--muted);
+}
+.ticket-ref b { color: var(--fg); letter-spacing: 0.12em; }
+.statuses { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { font-family: var(--mono); font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1.5px solid currentColor; }
+.pill.received { color: var(--st-received); } .pill.preparing { color: var(--st-preparing); }
+.pill.ready { color: var(--st-ready); } .pill.collected { color: var(--st-collected); }
+.arrow-sep { color: var(--muted); font-family: var(--mono); }
+
+section { display: grid; gap: 18px; }
+.section-head { display: grid; gap: 6px; }
+
+/* Flow tabs */
+.tabs {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  display: flex; gap: 6px; flex-wrap: wrap; padding-block: 10px; border-bottom: 1px solid var(--line);
+}
+.tab {
+  font: 600 0.9rem var(--display); color: var(--fg); background: transparent; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; display: inline-flex; gap: 8px; align-items: baseline;
+}
+.tab .n { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.tab[aria-selected="true"] .n { color: var(--bg); opacity: 0.8; }
+.tab:focus-visible, .btn:focus-visible, .msg:focus-visible { outline: 3px solid var(--hot); outline-offset: 2px; }
+
+.flow-summary { display: grid; gap: 6px; }
+.flow-summary .meta { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+@media (max-width: 940px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.diagram {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; min-width: 0;
+}
+.diagram svg { display: block; }
+.lane-box { fill: var(--bg); stroke: var(--line); }
+.lane-box.client { stroke: var(--accent); }
+.lane-box.data { stroke-dasharray: 4 3; }
+.lane-label { fill: var(--fg); font: 600 12px var(--display); }
+.lane-sub { fill: var(--muted); font: 10px var(--mono); }
+.lifeline { stroke: var(--line); stroke-dasharray: 3 4; }
+.msg { color: var(--muted); cursor: pointer; opacity: 0.8; }
+.msg line, .msg path { stroke: currentColor; stroke-width: 1.5; fill: none; }
+.msg polygon { fill: currentColor; }
+.msg text { fill: var(--fg); font: 11.5px var(--body); }
+.msg .num { font: 600 10px var(--mono); fill: var(--bg); }
+.msg circle { fill: currentColor; }
+.msg.res line, .msg.res path { stroke-dasharray: 5 4; }
+.msg.push { color: var(--push); }
+.msg.err { color: var(--err); }
+.msg.done { opacity: 1; color: var(--accent); }
+.msg.done.push { color: var(--push); }
+.msg.done.err { color: var(--err); }
+.msg.active { opacity: 1; color: var(--hot); }
+.msg.active line, .msg.active path { stroke-width: 3; }
+.msg.active text { font-weight: 700; }
+.msg .hit { stroke: transparent; stroke-width: 18; }
+.row-hl { fill: var(--hot); opacity: 0.13; }
+
+/* Step ticket */
+.ticket {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px;
+  display: grid; gap: 14px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 70px);
+}
+@media (max-width: 940px) { .ticket { position: static; } }
+.ticket .count { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.ticket .kind { font-weight: 600; }
+.ticket h3 { font-size: 1.2rem; }
+.ticket .field { display: grid; gap: 4px; }
+.ticket .field .eyebrow { font-size: 0.7rem; }
+.ticket .where {
+  font-family: var(--mono); font-size: 0.8rem; background: var(--bg); border: 1px solid var(--line);
+  padding: 8px 10px; border-radius: 4px; overflow-wrap: anywhere;
+}
+.ticket .interview { border-left: 3px solid var(--hot); padding-left: 10px; font-size: 0.93rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--mono); font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); }
+.chip b { color: var(--accent); }
+.controls { display: flex; gap: 8px; align-items: center; }
+.btn {
+  font: 600 0.9rem var(--display); cursor: pointer; padding: 8px 14px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.hint { font-size: 0.78rem; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--muted); }
+.legend i.res { border-top-style: dashed; }
+.legend i.push { border-color: var(--push); }
+.legend i.err { border-color: var(--err); }
+
+/* Overview */
+.overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.panel pre.mermaid { margin: 0; overflow-x: auto; background: transparent; }
+.panel p { font-size: 0.93rem; color: var(--muted); }
+
+/* Trade-offs */
+.tradeoffs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.trade { border-top: 3px solid var(--accent); background: var(--surface); padding: 14px 16px; border-radius: 0 0 8px 8px; display: grid; gap: 8px; align-content: start; }
+.trade dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 0.92rem; }
+.trade dt { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding-top: 3px; }
+.trade dd { margin: 0; }
+
+footer { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) { .msg { transition: opacity .15s, color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="eyebrow">Restaurant Web App · MVP architecture</span>
+    <h1>How an order moves through the system</h1>
+    <p>Step through each flow of the restaurant app: what the browser sends, which container and NestJS class handles it, what lands in Postgres or Redis, and which architecture decision (AD) makes it work that way.</p>
+    <div class="statuses" aria-label="Order lifecycle">
+      <span class="ticket-ref">Order Reference <b>K7F29Q</b></span>
+      <span class="pill received">RECEIVED</span><span class="arrow-sep">→</span>
+      <span class="pill preparing">PREPARING</span><span class="arrow-sep">→</span>
+      <span class="pill ready">READY</span><span class="arrow-sep">→</span>
+      <span class="pill collected">COLLECTED</span>
+    </div>
+  </header>
+
+  <section id="flows" aria-labelledby="flows-h">
+    <div class="section-head">
+      <span class="eyebrow">Flows</span>
+      <h2 id="flows-h">Seven flows, step by step</h2>
+      <p>Pick a flow, then use Next / Back or the ← → keys. You can also click any arrow in the diagram.</p>
+    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="flow-summary" id="flow-summary"></div>
+    <div class="legend" aria-hidden="true">
+      <span><i></i> request / call</span>
+      <span><i class="res"></i> response</span>
+      <span><i class="push"></i> live push (Socket.IO)</span>
+      <span><i class="err"></i> rejected</span>
+    </div>
+    <div class="stage">
+      <div class="diagram" id="diagram" role="img" aria-label="Sequence diagram of the selected flow"></div>
+      <aside class="ticket" id="ticket" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="ov-h">
+    <div class="section-head">
+      <span class="eyebrow">Big picture</span>
+      <h2 id="ov-h">Containers, modules and the order lifecycle</h2>
+    </div>
+    <div class="overview">
+      <div class="panel">
+        <h3>Containers (Docker Compose)</h3>
+        <pre class="mermaid">
+flowchart LR
+  B["Browser"] -->|"https://localhost"| PX["proxy (Caddy)"]
+  PX -->|"/"| W["web (Next.js)"]
+  PX -->|"/api/*"| A["api (NestJS)"]
+  W -->|"server-side only"| A
+  A --> PG[("postgres")]
+  A --> R[("redis")]
+  M["migrate (one-shot)"] --> PG
+  SD["seed (one-shot)"] --> PG
+        </pre>
+        <p>The browser only ever talks to Caddy, so the whole app is one origin. Cookies just work, and CORS never comes up. (AD-15)</p>
+      </div>
+      <div class="panel">
+        <h3>NestJS modules: who may import whom</h3>
+        <pre class="mermaid">
+flowchart LR
+  realtime["realtime (gateway)"] --> auth
+  realtime --> orders
+  orders --> menu
+  auth --> common
+  orders --> common
+  menu --> common
+        </pre>
+        <p>Imports only go one way, so there are no circular module imports. The Socket.IO server is reached through a small ref in <code>common/</code>. (AD-3)</p>
+      </div>
+      <div class="panel">
+        <h3>Inside a rule-heavy module</h3>
+        <pre class="mermaid">
+flowchart TD
+  C["Controller / Guard"] --> S["Service"]
+  S --> D["Domain (pure TS)"]
+  S --> P["Port (interface)"]
+  X["Adapter: Prisma / Redis"] --> P
+        </pre>
+        <p>Rules like "RECEIVED can only become PREPARING" live in pure domain classes, so unit tests need no database. (AD-3, AD-7)</p>
+      </div>
+      <div class="panel">
+        <h3>Shared contract package</h3>
+        <pre class="mermaid">
+flowchart LR
+  web["apps/web"] --> shared["@restaurant/shared (Zod)"]
+  api["apps/api"] --> shared
+  shared --> zod["zod"]
+        </pre>
+        <p>Each request, response and socket event is defined once as a Zod schema. The api validates with it, and the web parses responses with it. (AD-2)</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="tr-h">
+    <div class="section-head">
+      <span class="eyebrow">For the interview</span>
+      <h2 id="tr-h">Trade-offs, and why each one went this way</h2>
+    </div>
+    <div class="tradeoffs" id="tradeoffs"></div>
+  </section>
+
+  <footer>
+    <span>Source of truth: <code>ARCHITECTURE-SPINE.md</code> (AD-1 to AD-19) and its <code>.memlog.md</code>, both in the same folder as this page.</span>
+    <span>Stack: Node 24 · pnpm 11 · NestJS 11 · Next.js 16 · Prisma 7 · PostgreSQL 18 · Redis 8 · Socket.IO 4 · Zod 4 · Caddy 2 · Vitest · Playwright.</span>
+  </footer>
+</div>
+
+<script>
+const AD = {
+  "AD-1": "One pnpm-workspaces monorepo", "AD-2": "Shared Zod wire contract", "AD-3": "Module boundaries & data ownership",
+  "AD-4": "Two principal types, default deny", "AD-5": "Staff JWTs in httpOnly cookies", "AD-6": "Opaque Guest Session, one resolver",
+  "AD-7": "Forward-only status machine, atomic", "AD-8": "Identifiers & Order Reference", "AD-9": "Money in cents, price snapshot",
+  "AD-10": "Socket.IO, server-assigned rooms", "AD-11": "Menu cache & upsert-only seed", "AD-12": "Frontend data access",
+  "AD-13": "One error envelope", "AD-14": "Config fails fast", "AD-15": "Containers & environments",
+  "AD-16": "Tests on real infra, injected Clock", "AD-17": "Code quality gates", "AD-18": "CI on GitHub Actions", "AD-19": "API surface"
+};
+
+// kind: req | res | push | err | self
+const FLOWS = [
+  {
+    id: "stack", name: "Starting the stack", fr: ["Build step 1"],
+    summary: "<code>docker compose up</code> brings everything up in a fixed order, so the api never starts against an empty or un-migrated database.",
+    lanes: [["Developer", "docker compose", "client"], ["Postgres", "postgres:18", "data"], ["Redis", "redis:8", "data"], ["migrate", "one-shot"], ["seed", "one-shot"], ["API", "NestJS"], ["Web", "Next.js"], ["Caddy", "proxy :443"]],
+    steps: [
+      { f: 0, t: 1, k: "req", l: "start, wait until healthy", d: "Postgres and Redis start first. Compose waits for their healthchecks before anything that needs them.", w: "compose.yaml → services.postgres.healthcheck", ad: ["AD-15"] },
+      { f: 0, t: 2, k: "req", l: "start, wait until healthy", d: "Redis holds the Menu cache, the staff sessions and the Guest Sessions.", w: "compose.yaml → services.redis", ad: ["AD-15", "AD-3"] },
+      { f: 0, t: 3, k: "req", l: "run once", d: "A one-shot container runs the migrations, then exits. The api depends on it finishing successfully.", w: "compose.yaml → migrate: prisma migrate deploy", ad: ["AD-15"] },
+      { f: 3, t: 1, k: "req", l: "prisma migrate deploy", d: "Applies the committed migrations from apps/api/prisma/migrations. Prisma 7 reads its connection from prisma.config.ts.", w: "apps/api/prisma.config.ts", ad: ["AD-15"] },
+      { f: 0, t: 4, k: "req", l: "run once, after migrate", d: "The seed boots a small SeedModule. It loads only the Menu, the password hasher, Prisma and Redis, and shares the api's .env so its config check passes.", w: "apps/api/src/seed/seed.module.ts", ad: ["AD-11", "AD-14"] },
+      { f: 4, t: 1, k: "req", l: "upsert Menu + staff", d: "Upsert by fixed UUIDs (Menu Items) and unique email (staff). It never deletes, so retained Orders stay valid.", w: "apps/api/src/seed/seed.ts", ad: ["AD-11", "AD-9"], i: "Why upsert? Deleting Menu Items would break the foreign keys of every Order we keep forever." },
+      { f: 4, t: 2, k: "req", l: "MenuCache.invalidate()", d: "Clears menu:v1 using the same class the api uses. Nothing hard-codes the key, so newly seeded items appear (FR-1).", w: "apps/api/src/menu/menu.cache.ts", ad: ["AD-11"] },
+      { f: 0, t: 5, k: "req", l: "start api, wait /health", d: "The api checks its env with Zod and exits if anything is missing. Compose then waits for GET /api/v1/health.", w: "apps/api/src/common/env.schema.ts", ad: ["AD-14", "AD-19"] },
+      { f: 0, t: 6, k: "req", l: "start web", d: "Next.js starts after the api is healthy. In dev it runs with hot reload from bind-mounted source.", w: "compose.dev.yaml → web (target: dev)", ad: ["AD-15"] },
+      { f: 0, t: 7, k: "req", l: "start proxy, publish :443", d: "Caddy is the only container with a host port. It forwards /api/* unchanged to the api and everything else to web.", w: "Caddyfile", ad: ["AD-15"], i: "One origin means no CORS, and SameSite=Strict cookies work for both HTTP and WebSocket." }
+    ]
+  },
+  {
+    id: "menu", name: "Viewing the Menu", fr: ["FR-1"],
+    summary: "Lena opens the site. Next.js renders the Menu on the server, and the api serves it from Redis after the first request.",
+    lanes: [["Guest browser", "Lena's phone", "client"], ["Caddy", "proxy"], ["Web", "Next.js server"], ["API", "MenuService"], ["Redis", "menu:v1", "data"], ["Postgres", "MenuItem", "data"]],
+    steps: [
+      { f: 0, t: 1, k: "req", l: "GET https://localhost/", d: "The guest opens the home page. No login needed.", w: "Browser", ad: ["AD-4"] },
+      { f: 1, t: 2, k: "req", l: "forward /", d: "Anything that isn't /api/* goes to the Next.js container.", w: "Caddyfile", ad: ["AD-15"] },
+      { f: 2, t: 3, k: "req", l: "GET http://api:3000/api/v1/menu", d: "Only Next.js server code uses the internal Docker address. The page is force-dynamic, so it renders on every request and isn't frozen at build time.", w: "apps/web/app/page.tsx", ad: ["AD-12"], i: "Browser code never calls http://api:3000. It would work locally and break in Docker." },
+      { f: 3, t: 4, k: "req", l: "GET menu:v1", d: "Cache-aside: MenuService is the only reader and writer of this key.", w: "apps/api/src/menu/menu.service.ts", ad: ["AD-11", "AD-3"] },
+      { f: 4, t: 3, k: "res", l: "miss (first request)", d: "Empty after a fresh seed, because the seed invalidated it.", w: "Redis", ad: ["AD-11"] },
+      { f: 3, t: 5, k: "req", l: "SELECT menu items", d: "Load all Menu Items and group them by category. Prices are integer cents.", w: "PrismaMenuRepository", ad: ["AD-9"] },
+      { f: 3, t: 4, k: "req", l: "SET menu:v1 (never if empty)", d: "Stores the grouped Menu with no TTL. An empty Menu is never cached, which avoids a race with the seed.", w: "menu.cache.ts", ad: ["AD-11"] },
+      { f: 3, t: 2, k: "res", l: "200 MenuResponse", d: "Next.js parses the body with the shared MenuResponseSchema before using it.", w: "@restaurant/shared → menu.schema.ts", ad: ["AD-2"] },
+      { f: 2, t: 0, k: "res", l: "HTML, mobile-first", d: "Rendered HTML goes back through Caddy. Prices are formatted only at this point.", w: "apps/web/app/page.tsx", ad: ["AD-9", "AD-12"] }
+    ]
+  },
+  {
+    id: "place", name: "Placing an Order", fr: ["FR-2", "FR-3"],
+    summary: "Lena submits two dishes and a drink. The api checks the input, takes prices from the database, creates Order K7F29Q, sets her Guest Session cookie and tells the kitchen.",
+    lanes: [["Guest browser", "Lena", "client"], ["API transport", "controller + pipe"], ["OrdersService", "+ domain"], ["Redis", "guest:session", "data"], ["Postgres", "Order, OrderItem", "data"], ["Kitchen browser", "room: kitchen", "client"]],
+    steps: [
+      { f: 0, t: 1, k: "req", l: "POST /api/v1/orders", d: "Body: { guestName, items: [{ menuItemId, quantity }] }. The client sends no prices. Caddy passes /api/* through unchanged.", w: "apps/web/lib/api.ts", ad: ["AD-19", "AD-9"] },
+      { f: 1, t: 1, k: "self", l: "ZodValidationPipe", d: "Checked against PlaceOrderRequestSchema from the shared package. Zero items or quantity < 1 → 400 VALIDATION_FAILED.", w: "@restaurant/shared → order.schema.ts", ad: ["AD-2", "AD-13"] },
+      { f: 1, t: 2, k: "req", l: "placeOrder(cmd, sid?)", d: "The route is @Public(). The controller has no rules: it hands the command and any guest cookie to the service.", w: "orders.controller.ts → OrdersService.placeOrder", ad: ["AD-3", "AD-4"] },
+      { f: 2, t: 3, k: "req", l: "GuestSessionService.resolve(sid)", d: "The one place that decides whether a Guest Session is valid. With an open, uncollected Order it returns a session, and placement fails with 409 ORDER_ALREADY_OPEN. Lena has no cookie yet, so it returns null.", w: "orders/guest-session.service.ts", ad: ["AD-6"] },
+      { f: 2, t: 4, k: "req", l: "load names + priceCents", d: "Read through MenuService, which owns MenuItem. An unknown id → 400 MENU_ITEM_NOT_FOUND.", w: "MenuService.findByIds", ad: ["AD-3", "AD-9", "AD-13"] },
+      { f: 2, t: 2, k: "self", l: "OrderReference + totalCents", d: "Generates 6 random [A-Z0-9] characters with a CSPRNG (e.g. K7F29Q) and computes the total on the server.", w: "orders/domain/order-reference.ts", ad: ["AD-8", "AD-9"], i: "Not sequential, so no one can enumerate orders (OWASP IDOR)." },
+      { f: 2, t: 4, k: "req", l: "INSERT Order + OrderItems", d: "Status RECEIVED. Each OrderItem copies name and unitPriceCents, so later Menu changes never rewrite history. Retries if the reference collides.", w: "PrismaOrderRepository.create", ad: ["AD-9", "AD-7"] },
+      { f: 2, t: 3, k: "req", l: "SET guest:session:{sid}", d: "An opaque 128-bit id → orderId. The Redis TTL only cleans up; the 24 h rule is checked in code against the injected Clock.", w: "RedisGuestSessionStore", ad: ["AD-6", "AD-16"] },
+      { f: 2, t: 5, k: "push", l: "order.created (after commit)", d: "Sent through the OrderEventsPublisher port to room kitchen. Payload: KitchenOrder. It appears on every open board within 2 s.", w: "orders/adapters/socket-io-order-events.publisher.ts", ad: ["AD-10"] },
+      { f: 1, t: 0, k: "res", l: "201 GuestOrderView + Set-Cookie", d: "guest_session cookie: HttpOnly, Secure, SameSite=Strict, Path=/, expires placedAt + 24 h. The body has the reference and no internal UUID.", w: "orders.controller.ts", ad: ["AD-6", "AD-8"] }
+    ]
+  },
+  {
+    id: "track", name: "Refresh & live tracking", fr: ["FR-3", "FR-4", "FR-5"],
+    summary: "Lena accidentally refreshes. Her cookie brings her back to her Order, and a socket puts her in her Order's room for live updates. On another device, she can type the reference instead.",
+    lanes: [["Guest browser", "Lena", "client"], ["API", "guard / gateway"], ["GuestSessionService", "resolve()"], ["Redis", "guest:session", "data"], ["Postgres", "Order", "data"]],
+    steps: [
+      { f: 0, t: 1, k: "req", l: "GET /api/v1/orders/current", d: "The /track page calls this through lib/api.ts. The browser sends the guest_session cookie automatically (same origin).", w: "apps/web/app/track/page.tsx", ad: ["AD-12", "AD-19"] },
+      { f: 1, t: 2, k: "req", l: "GuestSessionGuard → resolve", d: "The guard implements no rules of its own. It calls the shared resolver.", w: "orders/guest-session.guard.ts", ad: ["AD-4", "AD-6"] },
+      { f: 2, t: 3, k: "req", l: "GET guest:session:{sid}", d: "Finds the orderId. A missing key means no session.", w: "RedisGuestSessionStore", ad: ["AD-6"] },
+      { f: 2, t: 4, k: "req", l: "load Order, check rules", d: "Valid only if not COLLECTED and clock.now() < placedAt + 24 h. Otherwise the key is deleted and the answer is 401 → the web redirects to the Menu.", w: "orders/domain/guest-session.policy.ts", ad: ["AD-6", "AD-16"], i: "Expiry is decided against an injected Clock, so the 24 h test runs in milliseconds." },
+      { f: 1, t: 0, k: "res", l: "200 GuestOrderView", d: "Status, items, guest name and reference. Guests never see internal UUIDs.", w: "@restaurant/shared → GuestOrderViewSchema", ad: ["AD-8", "AD-2"] },
+      { f: 0, t: 1, k: "req", l: "Socket.IO connect /api/socket.io", d: "The handshake carries the same cookie, because it uses Path=/.", w: "apps/web/lib/socket.ts", ad: ["AD-10", "AD-6"] },
+      { f: 1, t: 2, k: "req", l: "handshake → same resolve()", d: "The socket uses the same validity rule as HTTP, so the two can never disagree.", w: "realtime/realtime.gateway.ts", ad: ["AD-6", "AD-10"] },
+      { f: 1, t: 1, k: "self", l: "server joins room order:{id}", d: "The client never names a room. The server decides after checking the cookie.", w: "realtime.gateway.ts → handleConnection", ad: ["AD-10"], i: "If clients chose rooms, guessing a room name would leak someone else's order." },
+      { f: 0, t: 0, k: "self", l: "refetch snapshot, then apply events", d: "On every reconnect the page refetches over HTTP. An event is applied only if its status is later than the one shown, so a stale event can't move it backwards.", w: "apps/web/app/track/use-order-live.ts", ad: ["AD-10"] },
+      { f: 0, t: 1, k: "req", l: "order.subscribe { reference }", d: "On another device with no cookie, Lena types K7F29Q. It's checked like GET /orders/by-reference and shares its throttle.", w: "realtime.gateway.ts → subscribe", ad: ["AD-8", "AD-10"] },
+      { f: 1, t: 0, k: "res", l: "ack { ok: true }", d: "Joins order:{id}. An unknown or expired reference gets the same ORDER_NOT_FOUND, which reveals nothing.", w: "@restaurant/shared → ws-events.ts", ad: ["AD-8", "AD-13"] }
+    ]
+  },
+  {
+    id: "staff", name: "Staff login, refresh, logout", fr: ["FR-6", "FR-7"],
+    summary: "Omar logs in. After 5 minutes his access token expires and is refreshed silently. At the end of his shift he logs out, and every token and socket of that session stops working at once.",
+    lanes: [["Staff browser", "Omar", "client"], ["API", "AuthController"], ["AuthService", "+ PasswordHasher"], ["Redis", "auth:*", "data"], ["Postgres", "StaffUser", "data"], ["Gateway", "Socket.IO"]],
+    steps: [
+      { f: 0, t: 1, k: "req", l: "POST /api/v1/auth/login", d: "Body checked against LoginRequestSchema: { email, password }.", w: "apps/web/app/kitchen/login/page.tsx", ad: ["AD-19", "AD-2"] },
+      { f: 1, t: 2, k: "req", l: "login(email, password)", d: "The controller passes it to the service.", w: "auth/auth.service.ts", ad: ["AD-3"] },
+      { f: 2, t: 4, k: "req", l: "find StaffUser by email", d: "Staff accounts are seeded; there is no sign-up.", w: "PrismaStaffRepository", ad: ["AD-3"] },
+      { f: 2, t: 2, k: "self", l: "argon2id verify", d: "Through the PasswordHasher port. A wrong email and a wrong password give the same INVALID_CREDENTIALS.", w: "auth/adapters/argon2-password.hasher.ts", ad: ["AD-5", "AD-13"] },
+      { f: 2, t: 3, k: "req", l: "SET auth:session:{sid}, auth:refresh:{jti}", d: "The session record is what makes logout instant: every access token carries the sid, and the guard checks it.", w: "RedisSessionStore", ad: ["AD-5"] },
+      { f: 1, t: 0, k: "res", l: "200 StaffMe + 2 cookies", d: "access_token: 5 min, Path=/. refresh_token: 1 h, Path=/api/v1/auth. Both HttpOnly, Secure, SameSite=Strict.", w: "auth.controller.ts", ad: ["AD-5"], i: "JavaScript can never read either token, so an injected script can't steal them." },
+      { f: 0, t: 5, k: "req", l: "socket connect", d: "StaffAuthGuard logic checks the cookie and the sid. The server joins rooms kitchen + staff-session:{sid}.", w: "realtime.gateway.ts", ad: ["AD-4", "AD-10"] },
+      { f: 0, t: 1, k: "err", l: "PATCH … → 401 (5 min later)", d: "The access token has expired. A guest cookie would get the same 401, never access.", w: "StaffAuthGuard", ad: ["AD-4"] },
+      { f: 0, t: 1, k: "req", l: "POST /auth/refresh (once)", d: "lib/api.ts runs a single refresh per tab, then retries the original request. A second 401 → login page.", w: "apps/web/lib/api.ts", ad: ["AD-5"] },
+      { f: 2, t: 3, k: "req", l: "GETDEL auth:refresh:{jti}", d: "Consumes the refresh token atomically, so it can only be used once (rotation). An unknown jti → 401.", w: "RedisSessionStore.consumeRefresh", ad: ["AD-5"] },
+      { f: 1, t: 0, k: "res", l: "204 + rotated cookies", d: "A new access/refresh pair. Active staff stay logged in; after an hour idle, they log in again.", w: "auth.controller.ts", ad: ["AD-5"] },
+      { f: 0, t: 1, k: "req", l: "POST /auth/logout", d: "End of shift.", w: "kitchen header → Logout", ad: ["AD-19"] },
+      { f: 2, t: 3, k: "req", l: "DEL session + refresh keys", d: "From now on, any access token with this sid is rejected, even inside its 5 minutes.", w: "AuthService.logout", ad: ["AD-5"] },
+      { f: 2, t: 5, k: "req", l: "disconnectSockets(staff-session:{sid})", d: "Through SocketServerRef in common/, so auth doesn't import realtime and there's no module cycle.", w: "common/socket-server.ref.ts", ad: ["AD-3", "AD-5"] },
+      { f: 1, t: 0, k: "res", l: "204, cookies cleared", d: "Omar's old session can no longer be used. FR-6's revocation test asserts exactly this.", w: "auth.controller.ts", ad: ["AD-5", "AD-16"] }
+    ]
+  },
+  {
+    id: "advance", name: "Advancing status (and the race)", fr: ["FR-8", "FR-9", "FR-5"],
+    summary: "Omar and a colleague tap Take on the same Order at the same moment. One conditional UPDATE decides the winner, the loser gets 409, and Lena's page updates live.",
+    lanes: [["Staff A", "Omar", "client"], ["Staff B", "colleague", "client"], ["API", "OrdersController"], ["OrdersService", "+ StatusMachine"], ["Postgres", "Order", "data"], ["Guest browser", "Lena", "client"]],
+    steps: [
+      { f: 0, t: 2, k: "req", l: "PATCH …/status { to: PREPARING }", d: "PATCH /api/v1/kitchen/orders/:id/status, behind StaffAuthGuard.", w: "apps/web/app/kitchen/board.tsx", ad: ["AD-19", "AD-4"] },
+      { f: 1, t: 2, k: "req", l: "same request, same moment", d: "Two boards, one Order: the classic double-tap.", w: "apps/web/app/kitchen/board.tsx", ad: ["AD-7"] },
+      { f: 2, t: 3, k: "req", l: "advance(id, PREPARING) × 2", d: "Both requests reach the service.", w: "OrdersService.advance", ad: ["AD-3"] },
+      { f: 3, t: 3, k: "self", l: "predecessor(PREPARING) = RECEIVED", d: "Only the pure-TS OrderStatusMachine knows the order of statuses and that COLLECTED is final.", w: "orders/domain/order-status-machine.ts", ad: ["AD-7"], i: "State-machine pattern in about 20 lines, unit-tested with no database." },
+      { f: 3, t: 4, k: "req", l: "UPDATE … WHERE status = RECEIVED", d: "A's update matches 1 row: A wins.", w: "PrismaOrderRepository.transition", ad: ["AD-7"] },
+      { f: 3, t: 4, k: "err", l: "B's UPDATE → 0 rows", d: "The status is already PREPARING, so B's condition fails. No lock and no read-then-write race.", w: "PrismaOrderRepository.transition", ad: ["AD-7"] },
+      { f: 2, t: 1, k: "err", l: "409 INVALID_TRANSITION", d: "Uses the standard error envelope. B's board refreshes and shows the card already moved.", w: "common/exception.filter.ts", ad: ["AD-13"] },
+      { f: 3, t: 0, k: "push", l: "order.status-changed → kitchen", d: "Published only after the commit. Kitchen payload: { id, reference, status, changedAt }.", w: "SocketIoOrderEventsPublisher", ad: ["AD-10"] },
+      { f: 3, t: 5, k: "push", l: "order.status-changed → order:{id}", d: "Guest payload: { reference, status, changedAt }, with no UUID. Lena sees PREPARING in under 2 s without reloading.", w: "SocketIoOrderEventsPublisher", ad: ["AD-10", "AD-8"] },
+      { f: 2, t: 0, k: "res", l: "200 KitchenOrder", d: "Omar's own request completes.", w: "orders.kitchen.controller.ts", ad: ["AD-19"] }
+    ]
+  },
+  {
+    id: "collected", name: "Collected, then a fresh start", fr: ["FR-3", "FR-9"],
+    summary: "Omar marks the Order COLLECTED. The next day Lena orders again from the same browser: her old session ends quietly and she starts fresh.",
+    lanes: [["Guest browser", "Lena", "client"], ["API", "OrdersController"], ["GuestSessionService", "resolve()"], ["Redis", "guest:session", "data"], ["Postgres", "Order", "data"]],
+    steps: [
+      { f: 1, t: 0, k: "push", l: "order.status-changed: COLLECTED", d: "Staff marked it collected at the counter. The page shows COLLECTED, and the order leaves the Kitchen Board.", w: "SocketIoOrderEventsPublisher", ad: ["AD-10", "AD-7"] },
+      { f: 0, t: 1, k: "req", l: "POST /api/v1/orders (next day)", d: "The old cookie may still be in the browser.", w: "apps/web/lib/api.ts", ad: ["AD-19"] },
+      { f: 1, t: 2, k: "req", l: "resolve(old sid)", d: "The same single resolver as before.", w: "GuestSessionService.resolve", ad: ["AD-6"] },
+      { f: 2, t: 4, k: "req", l: "Order is COLLECTED", d: "A COLLECTED Order ends the session, as does one older than 24 h.", w: "guest-session.policy.ts", ad: ["AD-6"] },
+      { f: 2, t: 3, k: "req", l: "DEL guest:session:{sid}", d: "Lazy end: the key is removed the first time anyone sees the Order is done. No reverse index is needed.", w: "RedisGuestSessionStore", ad: ["AD-6"] },
+      { f: 2, t: 1, k: "res", l: "null → no open Order", d: "Had the Order still been open, this would be 409 ORDER_ALREADY_OPEN with details.reference pointing at it.", w: "OrdersService.placeOrder", ad: ["AD-6", "AD-13"] },
+      { f: 1, t: 0, k: "res", l: "201 new Order + new cookie", d: "Lena starts fresh. Her old Order stays in Postgres forever for future order history, but she can no longer reach it.", w: "orders.controller.ts", ad: ["AD-9", "AD-6"] }
+    ]
+  }
+];
+
+const TRADEOFFS = [
+  { t: "Code structure", chose: "Modular monolith with a pure domain core", over: "Full Clean Architecture / DDD + CQRS", why: "Four features in two days. Ports keep the planned move to Clean Architecture additive.", ad: "AD-3" },
+  { t: "Shared types", chose: "Zod schemas in @restaurant/shared", over: "Plain TS interfaces + NestJS DTO classes", why: "One definition both validates and types each payload, so web and api can't drift.", ad: "AD-2" },
+  { t: "Staff tokens", chose: "httpOnly cookies on one origin", over: "Bearer token kept in JS memory", why: "Scripts can't read the tokens. One mechanism covers HTTP and WebSocket. SameSite=Strict blocks CSRF.", ad: "AD-5" },
+  { t: "Guest session", chose: "Opaque id in Redis", over: "Guest JWT + refresh token", why: "Nothing to rotate. One Redis lookup answers \"is this session valid?\".", ad: "AD-6" },
+  { t: "Concurrent updates", chose: "Conditional UPDATE … WHERE status = expected", over: "Read, check, then write", why: "Race-safe with no locks. The loser gets a clear 409.", ad: "AD-7" },
+  { t: "Testing", chose: "Real Postgres + Redis in integration tests", over: "Mocked repositories", why: "Catches unique-constraint, TTL and race bugs that mocks hide. The same setup runs in CI.", ad: "AD-16" },
+  { t: "Live updates", chose: "Socket.IO, rooms assigned by the server", over: "Raw ws or polling", why: "Reconnect and rooms built in. The server decides who hears what.", ad: "AD-10" },
+  { t: "Network", chose: "Caddy as a single-origin proxy", over: "Separate web and api origins + CORS", why: "Cookies, WebSocket and CORS all become non-issues.", ad: "AD-15" },
+  { t: "Monorepo", chose: "pnpm workspaces", over: "Turborepo or Nx", why: "Three packages don't need a build cache. One less tool to learn and explain.", ad: "AD-1" }
+];
+
+const $ = (s) => document.querySelector(s);
+const NS = "http://www.w3.org/2000/svg";
+let flowIdx = 0, stepIdx = 0;
+
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+function renderTabs() {
+  const tabs = $("#tabs");
+  tabs.innerHTML = "";
+  FLOWS.forEach((f, i) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.setAttribute("role", "tab"); b.id = "tab-" + f.id;
+    b.setAttribute("aria-selected", i === flowIdx ? "true" : "false");
+    b.innerHTML = `<span class="n">${String(i + 1).padStart(2, "0")}</span>${f.name}`;
+    b.addEventListener("click", () => selectFlow(i));
+    tabs.appendChild(b);
+  });
+}
+
+function renderDiagram() {
+  const f = FLOWS[flowIdx];
+  const colW = 150, pad = 16, top = 64, rowH = 48;
+  const W = pad * 2 + colW * f.lanes.length;
+  const H = top + 30 + rowH * f.steps.length;
+  const x = (i) => pad + colW * i + colW / 2;
+  const svg = el("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}` });
+
+  const yOf = (i) => top + 36 + i * rowH;
+  el("rect", { class: "row-hl", x: 0, y: yOf(stepIdx) - 26, width: W, height: rowH - 4, rx: 4 }, svg);
+
+  f.lanes.forEach(([name, sub, tier], i) => {
+    el("line", { class: "lifeline", x1: x(i), y1: top, x2: x(i), y2: H - 8 }, svg);
+    el("rect", { class: "lane-box " + (tier || ""), x: x(i) - colW / 2 + 8, y: 10, width: colW - 16, height: 46, rx: 6 }, svg);
+    const t = el("text", { class: "lane-label", x: x(i), y: 30, "text-anchor": "middle" }, svg); t.textContent = name;
+    const s = el("text", { class: "lane-sub", x: x(i), y: 46, "text-anchor": "middle" }, svg); s.textContent = sub;
+  });
+
+  f.steps.forEach((st, i) => {
+    const y = yOf(i);
+    const kind = st.k;
+    const cls = ["msg", kind === "self" ? "req" : kind, i < stepIdx ? "done" : "", i === stepIdx ? "active" : ""].join(" ");
+    const g = el("g", { class: cls, tabindex: "0", role: "button", "aria-label": `Step ${i + 1}: ${st.l}` }, svg);
+    const x1 = x(st.f), x2 = x(st.t);
+    let lx, anchor;
+    if (st.f === st.t) {
+      el("path", { d: `M ${x1} ${y - 6} h 34 v 16 h -30` }, g);
+      el("polygon", { points: `${x1 + 2},${y + 10} ${x1 + 10},${y + 6} ${x1 + 10},${y + 14}` }, g);
+      el("path", { class: "hit", d: `M ${x1} ${y} h 34` }, g);
+      lx = x1 + 42; anchor = "start";
+    } else {
+      const dir = x2 > x1 ? 1 : -1;
+      el("line", { x1: x1, y1: y, x2: x2 - dir * 8, y2: y }, g);
+      el("polygon", { points: `${x2},${y} ${x2 - dir * 9},${y - 5} ${x2 - dir * 9},${y + 5}` }, g);
+      el("line", { class: "hit", x1: x1, y1: y, x2: x2, y2: y }, g);
+      lx = (x1 + x2) / 2; anchor = "middle";
+    }
+    const label = el("text", { x: lx, y: y - 9, "text-anchor": anchor }, g); label.textContent = st.l;
+    el("circle", { cx: x1 - (st.f === st.t ? 0 : (x2 > x1 ? 0 : 0)), cy: y, r: 9 }, g);
+    const num = el("text", { class: "num", x: x1, y: y + 3.5, "text-anchor": "middle" }, g); num.textContent = i + 1;
+    g.addEventListener("click", () => selectStep(i));
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectStep(i); } });
+  });
+
+  const d = $("#diagram");
+  d.innerHTML = "";
+  d.appendChild(svg);
+}
+
+function renderSummary() {
+  const f = FLOWS[flowIdx];
+  $("#flow-summary").innerHTML = `
+    <h3>${f.name}</h3>
+    <p>${f.summary}</p>
+    <div class="meta">${f.fr.map((r) => `<span class="chip">${r}</span>`).join("")}<span class="chip">${f.steps.length} steps</span></div>`;
+}
+
+function renderTicket() {
+  const f = FLOWS[flowIdx], st = f.steps[stepIdx];
+  const kindName = { req: "Request", res: "Response", push: "Live push", err: "Rejected", self: "Inside " + f.lanes[st.f][0] }[st.k];
+  const route = st.f === st.t ? f.lanes[st.f][0] : `${f.lanes[st.f][0]} → ${f.lanes[st.t][0]}`;
+  $("#ticket").innerHTML = `
+    <div class="count"><span>Step ${stepIdx + 1} of ${f.steps.length}</span><span class="kind">${kindName}</span></div>
+    <div class="field"><span class="eyebrow">${route}</span><h3>${st.l}</h3></div>
+    <p>${st.d}</p>
+    <div class="field"><span class="eyebrow">Where in the code</span><div class="where">${st.w}</div></div>
+    <div class="field"><span class="eyebrow">Governed by</span>
+      <div class="chips">${st.ad.map((a) => `<span class="chip" title="${AD[a]}"><b>${a}</b> ${AD[a]}</span>`).join("")}</div></div>
+    ${st.i ? `<p class="interview"><strong>Interview angle:</strong> ${st.i}</p>` : ""}
+    <div class="controls">
+      <button class="btn" id="prev" ${stepIdx === 0 ? "disabled" : ""}>Back</button>
+      <button class="btn primary" id="next">${stepIdx === f.steps.length - 1 ? (flowIdx < FLOWS.length - 1 ? "Next flow" : "Start over") : "Next"}</button>
+    </div>
+    <span class="hint">Tip: ← → keys move between steps.</span>`;
+  $("#prev").addEventListener("click", prev);
+  $("#next").addEventListener("click", next);
+}
+
+function render() { renderTabs(); renderSummary(); renderDiagram(); renderTicket(); }
+function selectFlow(i) {
+  flowIdx = i; stepIdx = 0; render();
+  try { history.replaceState(null, "", "#" + FLOWS[i].id); } catch (e) {}
+}
+function selectStep(i) { stepIdx = i; renderDiagram(); renderTicket(); }
+function next() {
+  const f = FLOWS[flowIdx];
+  if (stepIdx < f.steps.length - 1) selectStep(stepIdx + 1);
+  else selectFlow((flowIdx + 1) % FLOWS.length);
+}
+function prev() { if (stepIdx > 0) selectStep(stepIdx - 1); }
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest && e.target.closest("input, textarea")) return;
+  if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+});
+
+$("#tradeoffs").innerHTML = TRADEOFFS.map((t) => `
+  <article class="trade">
+    <span class="eyebrow">${t.t} · ${t.ad}</span>
+    <dl><dt>Chose</dt><dd><strong>${t.chose}</strong></dd><dt>Over</dt><dd>${t.over}</dd><dt>Why</dt><dd>${t.why}</dd></dl>
+  </article>`).join("");
+
+const start = FLOWS.findIndex((f) => "#" + f.id === location.hash);
+flowIdx = start >= 0 ? start : 0;
+render();
+</script>
