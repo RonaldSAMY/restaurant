@@ -7,6 +7,22 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
-    "dev": "docker compose -f compose.yaml -f compose.dev.yaml up"
+    "dev": "docker compose -f compose.yaml -f compose.dev.yaml up",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "docker compose -f compose.yaml -f compose.test.yaml run --rm --build api-unit && docker compose -f compose.yaml -f compose.test.yaml run --rm --build web-unit",
+    "test:int": "docker compose -f compose.yaml -f compose.test.yaml run --rm --build api-test; s=$?; docker compose -f compose.yaml -f compose.test.yaml rm -sf postgres-test redis-test; exit $s"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "~16.4.2",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsdoc": "^65.3.11",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2"
   }
 }

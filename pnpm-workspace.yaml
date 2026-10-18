@@ -5,5 +5,7 @@ packages:
 injectWorkspacePackages: true
 
 allowBuilds:
-  '@prisma/engines': true
+  "@prisma/engines": true
   prisma: true
+  # postinstall only re-checks the platform binding; the optional binary package covers it.
+  "@swc/core": false
