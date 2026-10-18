@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import './globals.css';
 
 /** Page metadata shared by every route. */
 export const metadata = { title: 'Restaurant' };

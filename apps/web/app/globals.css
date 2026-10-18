@@ -1,0 +1,54 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0 16px 2rem;
+}
+
+h1,
+h2,
+p,
+span {
+  overflow-wrap: anywhere;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.items li {
+  padding: 0.5rem 0;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.item-name {
+  font-weight: 600;
+  min-width: 0;
+}
+
+.item-price {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.item-description {
+  margin: 0.25rem 0 0;
+}
