@@ -8,12 +8,15 @@ import {
   type INestApplication,
   InternalServerErrorException,
   Logger,
+  Param,
   Post,
+  Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { ErrorEnvelopeSchema } from '@restaurant/shared';
+import { type ErrorCode, ErrorEnvelopeSchema } from '@restaurant/shared';
+import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 import request from 'supertest';
 import {
@@ -28,7 +31,7 @@ import {
 import { z } from 'zod';
 import { AppModule } from '../src/app.module';
 import { PrincipalGuard } from '../src/common/default-deny.guard';
-import { DomainError } from '../src/common/domain-error';
+import { DomainError, ERROR_STATUS } from '../src/common/domain-error';
 import { Public } from '../src/common/public.decorator';
 import { configureApp } from '../src/configure-app';
 
@@ -129,6 +132,29 @@ class ProbeController {
     });
   }
 
+  /** Throws a {@link DomainError} with the code from the path. */
+  @Public()
+  @Get('domain/:code')
+  domainCode(@Param('code') code: ErrorCode): never {
+    throw new DomainError(code, 'Domain failure');
+  }
+
+  /** Throws a value that is not an `Error`. */
+  @Public()
+  @Get('non-error')
+  nonError(): never {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- probe for non-Error throws
+    throw { password: 'non-error-marker' };
+  }
+
+  /** Starts the response, then fails. */
+  @Public()
+  @Get('headers-sent')
+  headersSent(@Res() res: Response): never {
+    res.status(200).write('partial');
+    throw new Error('late failure');
+  }
+
   /** Throws an unexpected error. */
   @Public()
   @Post('crash')
@@ -208,6 +234,40 @@ describe('api conventions', () => {
         details: { reference: 'A-1' },
       },
     });
+  });
+
+  it.each(Object.entries(ERROR_STATUS))(
+    'maps DomainError %s to HTTP %i',
+    async (code, status) => {
+      const res = await http().get(`/api/v1/probe/domain/${code}`);
+      expect(res.status).toBe(status);
+      expect(ErrorEnvelopeSchema.parse(res.body).error.code).toBe(code);
+    },
+  );
+
+  it('reports a root-level validation issue with path (root)', async () => {
+    const res = await http().post('/api/v1/probe/validate').send([]);
+    expect(res.status).toBe(400);
+    expect(ErrorEnvelopeSchema.parse(res.body).error.details).toEqual([
+      { path: '(root)', message: expect.any(String) as string },
+    ]);
+  });
+
+  it('hides a non-Error throw behind 500 INTERNAL without logging it', async () => {
+    const logged = vi.spyOn(Logger.prototype, 'error');
+    const res = await http().get('/api/v1/probe/non-error');
+    expect(res.status).toBe(500);
+    expect(ErrorEnvelopeSchema.parse(res.body).error.code).toBe('INTERNAL');
+    expect(logged).toHaveBeenCalledOnce();
+    expect(JSON.stringify(logged.mock.calls)).not.toContain('non-error-marker');
+  });
+
+  it('ends a response whose headers were already sent', async () => {
+    const logged = vi.spyOn(Logger.prototype, 'error');
+    const res = await http().get('/api/v1/probe/headers-sent');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('partial');
+    expect(JSON.stringify(logged.mock.calls)).toContain('headers were sent');
   });
 
   it('hides a crash behind 500 INTERNAL and logs no secrets', async () => {

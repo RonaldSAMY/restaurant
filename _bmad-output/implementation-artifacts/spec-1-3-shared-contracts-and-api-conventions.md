@@ -81,7 +81,7 @@ Default-deny rejects with 403 `FORBIDDEN`: a route nobody may reach is not an au
 
 - Malformed JSON needs no extra code: Nest surfaces the body-parser error as a 400 `HttpException`, which the status table maps to `VALIDATION_FAILED` (no details).
 - `DefaultDenyGuard` accepts `PrincipalGuard` subclasses passed to `@UseGuards` as classes or instances.
-- Verified: lint, format:check, typecheck, `pnpm test` (15 api + 3 web), `pnpm test:int` (11, incl. 8 conventions).
+- Verified: lint, format:check, typecheck, `pnpm test` (15 api + 3 web), `pnpm test:int` (29, incl. 26 conventions, after the review patches and the `spec-1-3-review-fixes.md` pass).
 
 ## Spec Change Log
 
@@ -89,8 +89,8 @@ Default-deny rejects with 403 `FORBIDDEN`: a route nobody may reach is not an au
 
 | # | Source | Finding | Verdict | Evidence | Route |
 |---|--------|---------|---------|----------|-------|
-| 1 | edge, blind | 5xx `HttpException` sends its raw message to the client and is never logged (`error-envelope.filter.ts:220-224`) | medium | Branch returns `exception.message` for any status and logs nothing; `InternalServerErrorException('db pool exhausted')` leaks it. | patch |
-| 2 | edge (+claim) | Non-Error throws are logged verbatim through `String(exception)` | low | Line 226 logs the thrown value itself, which can be built from request data; the fix is a direct one-line correction. | patch |
+| 1 | edge, blind | 5xx `HttpException` sends its raw message to the client and is never logged (`error-envelope.filter.ts`, `toEnvelope`'s `HttpException` branch) | medium | Branch returns `exception.message` for any status and logs nothing; `InternalServerErrorException('db pool exhausted')` leaks it. | patch |
+| 2 | edge (+claim) | Non-Error throws are logged verbatim through `String(exception)` | low | The non-Error log call in `toEnvelope` logged the thrown value itself, which can be built from request data; the fix is a direct one-line correction. | patch |
 | 3 | edge, blind | Crash test's `Logger.prototype.error` spy leaks if an assertion fails | low | `mockRestore()` runs only after every assertion passes; direct correction with try/finally. | patch |
 | 4 | verification-gap, blind | Guard and status-table behaviour untested: non-principal guard denied, controller-level and instance principal guard, 401/429 mapping | medium | Loosening the `some()` predicate, dropping `getAllAndMerge` class lookup, the instance branch, or the 401/429 rows keeps all 8 tests green. | patch |
 | 5 | blind | Logged stack begins with the error message; Prisma validation errors put call arguments (e.g. `passwordHash`) in it | maybe-false (medium if true) | No Prisma call exists yet; settles once Story 3.1 staff login throws a Prisma error through the filter. | defer |

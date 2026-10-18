@@ -71,3 +71,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-shared-contracts-and-api-conventions.md`
   summary: The global `@Catch()` ErrorEnvelopeFilter may also run for the planned Socket.IO gateway, where `switchToHttp().getResponse()` is not an express Response.
   evidence: Unverified, medium if true. Settle when the realtime gateway lands by checking whether Nest applies APP_FILTER to WS handlers; if so, guard with `host.getType() !== 'http'`.
+
+## Deferred from: human review of spec-1-3-shared-contracts-and-api-conventions (2026-10-18)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
+  summary: In Story 3.1, make `DefaultDenyGuard` require that a principal was actually set (final `canActivate` + abstract `authenticate()` on `PrincipalGuard`, or an interceptor requiring `req.principal`), not only that a `PrincipalGuard` is attached; also log method + route on 500s and narrow `DomainError.details` from `unknown`.
+  evidence: Today any `PrincipalGuard` subclass that returns true without setting a principal passes default deny; the first real guards land in 3.1.
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
+  summary: Extends the realtime-gateway entry above: the global `DefaultDenyGuard` will also deny every non-`@Public()` gateway handler.
+  evidence: `APP_GUARD` applies to WS handlers too, and they have no `@Public()` or `PrincipalGuard` today; settle when the gateway lands.
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
+  summary: With the first web form showing inline field errors, export `ValidationIssueSchema` (`{path, message}`) from `packages/shared` and type the `VALIDATION_FAILED` `details` with it.
+  evidence: `ErrorEnvelopeSchema.details` is `unknown`, so web would parse field issues untyped.

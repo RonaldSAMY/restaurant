@@ -32,24 +32,33 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
   /** Logger for unexpected (500) errors. */
   private readonly logger = new Logger(ErrorEnvelopeFilter.name);
 
-  /** Writes the envelope for `exception` to the HTTP response. */
+  /**
+   * Writes the envelope for `exception` to the HTTP response, or only ends the
+   * response when the handler already sent its headers.
+   */
   catch(exception: unknown, host: ArgumentsHost): void {
     const [status, body] = this.toEnvelope(exception);
-    host.switchToHttp().getResponse<Response>().status(status).json(body);
+    const res = host.switchToHttp().getResponse<Response>();
+    if (res.headersSent) {
+      this.logger.error(`Error after headers were sent (${body.error.code})`);
+      res.end();
+      return;
+    }
+    res.status(status).json(body);
   }
 
   /** Maps an exception to its HTTP status and envelope body. */
   private toEnvelope(exception: unknown): [number, ErrorEnvelope] {
     if (exception instanceof DomainError) {
       const { code, message, details } = exception;
-      return [ERROR_STATUS[code], { error: { code, message, details } }];
+      return [ERROR_STATUS[code] ?? 500, { error: { code, message, details } }];
     }
     if (exception instanceof ZodValidationException) {
       const zodError = exception.getZodError();
       const details =
         zodError instanceof ZodError
           ? zodError.issues.map((i) => ({
-              path: i.path.join('.'),
+              path: i.path.length ? i.path.map(String).join('.') : '(root)',
               message: i.message,
             }))
           : undefined;
