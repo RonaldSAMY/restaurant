@@ -90,6 +90,8 @@ Greenfield repo. Only `_bmad*`, `.claude/` and `.gitignore` exist; `.gitignore` 
 
 ## Spec Change Log
 
+- 2026-10-18 (code review, human-approved): the frozen "Root scripts use `pnpm -r`" rule is amended. The root `dev` script runs `docker compose -f compose.yaml -f compose.dev.yaml up`, because the app runs only in Docker (dev and prod) and the host only runs `pnpm install` for the editor; `build` still uses `pnpm -r`.
+
 ## Review Triage Log
 
 | # | Source | Finding | Verdict | Evidence | Route |
@@ -116,3 +118,93 @@ Greenfield repo. Only `_bmad*`, `.claude/` and `.gitignore` exist; `.gitignore` 
 | 20 | edge | `/api` without trailing slash routes to web | false | Nothing requests bare `/api`; all routes live under `/api/v1/` | reject |
 | 21 | edge | `http://localhost` (port 80) refused | false | Intended: only 443 is published, per the frozen intent | reject |
 | 22 | blind | No README / getting-started note | low | AC presumes `.env` is copied; docs not requested | reject |
+
+### Review Findings
+
+Code review 2026-10-18 (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor).
+
+- [x] [Review][Patch] Document the Docker-only workflow and the editor setup in the `compose.dev.yaml` header (resolved decision: the app runs only in containers, for dev and prod; the host only runs `pnpm install` so the editor can resolve types; generated files reach the host through the bind mount). [compose.dev.yaml:1-2]
+- [x] [Review][Defer] Dev containers run as root and write into the bind mount; on Linux hosts the output is root-owned, causing EACCES [compose.dev.yaml:5-47] — deferred: the team develops on macOS (Docker Desktop maps ownership); fix with `user:` if a Linux host joins.
+- [x] [Review][Patch] `.dockerignore` excludes only root-level `.env*`; nested `apps/web/.env.local` or `apps/api/.env` enter the build context and `next build` loads them, which breaks "next build gets no secrets" (medium). Fix: `**/.env` and `**/.env.*`. [.dockerignore:7-8]
+- [x] [Review][Patch] api `tsconfig.json` keeps the scaffold `declaration: true`, so unused `.d.ts` files ship in the prod image (low). [apps/api/tsconfig.json:8]
+- [x] [Review][Defer] Caddy `/api/*` → api vs web routing has no automated check; the planned Supertest tests run in-process and bypass the proxy [Caddyfile:5-11] — deferred: Story 1.2 CI should add a compose smoke job (`docker compose up -d --wait` + curl `/api/v1/health` and `/`).
+- [x] [Review][Defer] Planned `parseEnv` unit tests would not catch entry points dropping the call (`main.ts`, `instrumentation.ts` `NEXT_RUNTIME` guard) [apps/api/src/main.ts:9, apps/web/instrumentation.ts:7] — deferred: Story 1.2 should add entry-point exit checks (`-e DATABASE_URL=` api, `-e API_INTERNAL_URL=` web expect non-zero).
+
+**Rejected**
+
+- blind+acceptance+edge: Host-side `pnpm dev` / Prisma CLI fail outside compose (`.env` not loaded, `.env.example` lacks `PORT`/`API_INTERNAL_URL`, `prisma.config.ts` doesn't load `.env`, `shared` not prebuilt). Resolved decision: Docker-only runtime, so the loud fail-fast on the host is correct and compose injects every value.
+
+- blind: Spec `status: done` vs sprint `review`. The fix edits the spec under review; this review's status sync handles it.
+- blind: Triage #12 cites a `down -v` note that doesn't exist. The fix edits the spec under review.
+- blind: Triage #7/#14 rejection reasoning is wrong; no web missing-env verification command. The fix edits the spec under review.
+- blind: `migrate` skips Zod fail-fast. low: a missing URL still fails loudly with a Prisma error; the fix adds config complexity.
+- blind: `seed` validates `PORT` it doesn't use. false as a defect: the spec requires seed to parse the api env.
+- blind: No `enableShutdownHooks()`. false: no module registers destroy hooks yet; add it with the 1.4 connections.
+- blind: No `restart:` policy. low: a local dev stack, crashes unlikely in the skeleton; the fix adds config per service.
+- blind: `migrate`/`seed` defined in both package.json and compose. false: both are in sync, and no caller diverges.
+- blind: `shared` and `api` dev services build the same tag. low: the second build is a cache hit; dropping `build:` from `shared` would make it try to pull a local-only image.
+- acceptance: Logger names are string literals. false: neither caller is a class, so `ClassName.name` doesn't apply.
+- acceptance: No file-watch polling fallback in dev web. low: live edits verified on Docker Desktop; no failing host shown.
+- acceptance: `setGlobalPrefix` set in `main.ts`, not `AppModule`. false: Nest supports it only on the app instance; the intent is met.
+
+#### Round 2 (2026-10-18)
+
+- [x] [Review][Patch] Point the root `dev` script at Docker: `"dev": "docker compose -f compose.yaml -f compose.dev.yaml up"`; `build` stays `pnpm -r` (resolved decision; amends the frozen "Root scripts use `pnpm -r`" rule, see Spec Change Log). Source: blind-hunter. [package.json:10]
+- [x] [Review][Patch] `.env.example`: the password in `DATABASE_URL` must be percent-encoded when it contains `@ : / # ? %`; otherwise the URL parses the wrong user or host (low). Source: edge-case-hunter. [.env.example:5-9]
+- [x] [Review][Patch] `.env.example`: changing `POSTGRES_*` after the first boot has no effect, because the `postgres-data` volume keeps the old credentials. migrate then fails auth and blocks the stack until `docker compose down -v` (low). Source: edge-case-hunter. [.env.example:3-6]
+- [x] [Review][Defer] Planning docs predate the Docker-only and host-browser-only decisions (the epic goal still says "on a phone"): `epic-1-context.md` has `compose.test.yaml` publishing postgres-test/redis-test on `127.0.0.1:55432/56379` and CI service containers (a host-run test design), and the spine Stack table says "`prisma.config.ts` loads env" [epic-1-context.md:29,48; ARCHITECTURE-SPINE.md:291] — deferred: the fix edits other planning docs. Run `bmad-correct-course` before Story 1.2.
+- [x] [Review][Patch] Document trusting Caddy's `tls internal` root CA on the host (resolved decision: no phone access; the public pages only need to open in a browser on the host). Without it the browser shows a certificate warning on `https://localhost`, which `curl -sk` hides (low). Add a `Caddyfile` comment: `docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt .` then `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain root.crt`. Source: blind-hunter+edge-case-hunter. [Caddyfile:1]
+- [x] [Review][Defer] No check that nested `.env*` files stay out of the build context; reverting `.dockerignore` would pass everything [.dockerignore:7-8] — deferred: Story 1.2 CI image build should assert that a sentinel `apps/web/.env.local` is absent from the build and standalone output.
+
+**Rejected (round 2)**
+
+- blind: `pnpm-lock.yaml` not committed. false: it is tracked (`git ls-files pnpm-lock.yaml`), excluded only from the review diff.
+- blind: `.pnpm-store` not ignored. false: `pnpm_config_verify_deps_before_run=false` stopped it being created, and none exists on disk.
+- blind: Web missing-env command still missing from Verification. The fix edits the spec under review.
+- blind: Stale or false statements in the round-1 triage log (#7, #12, #14). The fix edits the spec under review.
+- blind: `review_loop_iteration: 0` / `status: done` stale. The fix edits the spec under review; status is re-set by this round's outcome.
+- blind: `deferred-work.md` first entries lack a `## Deferred from:` header. low: every entry carries `source_spec`, so its origin is clear.
+- acceptance: Story marked `done` before round 2. false: this round's outcome re-sets the status.
+- acceptance: Implementation Notes don't list the round-1 fixes. The fix edits the spec under review; they are recorded as checked Review Findings.
+- acceptance: Logger names are string literals. Already rejected in round 1 (neither caller is a class).
+
+#### Round 3 (2026-10-18)
+
+- [x] [Review][Patch] Dev `shared` service has no `init: true` (round-1 #2 fix missed it), so pnpm as PID 1 ignores SIGTERM and every dev `down` or restart waits 10 s, then SIGKILL (medium). Source: edge-case-hunter. [compose.dev.yaml:5]
+- [x] [Review][Patch] Caddyfile CA-trust comment copies `root.crt` into the repo root, where it isn't gitignored. It also omits that trust must be redone after `caddy-data` is reset (`down -v` makes a new root) and that Firefox uses its own trust store (low). Copy to `/tmp/caddy-root.crt` instead. Source: blind-hunter. [Caddyfile:1-3]
+- [x] [Review][Patch] Caddy site matches only `localhost`; `https://127.0.0.1` fails the TLS handshake (low). Use `localhost, 127.0.0.1`. Source: edge-case-hunter. [Caddyfile:4]
+- [x] [Review][Patch] `apps/web` `"start": "next start"` doesn't work with `output: 'standalone'`, and the prod image runs `node apps/web/server.js`, so the script is dead and misleading (low). Delete it. Source: blind-hunter. [apps/web/package.json:8]
+- [x] [Review][Patch] `deferred-work.md` Linux entry says `user: "${UID:-1000}:${GID:-1000}"`, but bash doesn't export `UID` and `GID` isn't set, so it would always fall back to 1000:1000 (low). Note that `UID`/`GID` must be exported or written to `.env`. Source: blind-hunter. [deferred-work.md]
+- [x] [Review][Patch] `deferred-work.md` correct-course entry omits the root-script amendment, so spine AD-1 and `epic-1-context.md` still say "root scripts use `pnpm -r`" and Story 1.2 could revert `dev` (low). Source: acceptance-auditor. [deferred-work.md]
+
+**Rejected (round 3)**
+
+- blind: `migrate` depends on `redis: service_healthy` although it never uses Redis. false as a defect: the AC fixes the order "postgres/redis healthy → migrate".
+- blind: Prisma client files may not reach `dist/`. false: all 8 generated files are `.ts`, and `dist/generated` has 8 `.js` + 8 `.map`.
+- blind: Build `DATABASE_URL` from `POSTGRES_*` via compose interpolation (triage #9). low: already rejected in round 1, and interpolation can't percent-encode special-character passwords.
+- blind: No getting-started document (triage #22). low: steps are documented next to the files they concern; a new file wasn't requested.
+- blind: Web missing-env command missing from Verification. The fix edits the spec under review (third time raised).
+- blind: False entries in triage log #7 / #12. The fix edits the spec under review.
+- blind: `review_loop_iteration: 0` not bumped. The fix edits the spec under review.
+- blind: Frozen "Root scripts use `pnpm -r`" line has no inline amendment note. The fix edits frozen spec text; the amendment is in the Spec Change Log.
+- acceptance: Story marked `done` while round 3 is open. false: this round's outcome re-sets the status.
+
+#### Round 4 (2026-10-18)
+
+- [x] [Review][Patch] Nothing tells devs that the six named `*-modules` volumes keep old dependencies after a dependency change; `up --build` rebuilds the image but the volumes win (medium). Add a `compose.dev.yaml` header line on removing only the `*-modules` volumes (not `down -v`, which also wipes `postgres-data`). Source: blind-hunter. [compose.dev.yaml:1-6]
+- [x] [Review][Patch] Compose interpolates `$` in `env_file` values: verified that `PW=ab$cd$$ef` becomes `ab$ef`, so a password containing `$` is silently mangled (low). Add an `.env.example` note to write `$` as `$$`. Source: edge-case-hunter. [.env.example:8-10]
+- [x] [Review][Patch] Caddy site list lacks `[::1]`, so `https://[::1]` fails TLS (the same gap round 3 fixed for `127.0.0.1`) (low). Source: edge-case-hunter. [Caddyfile:6]
+- [x] [Review][Patch] api `"start": "node dist/main"` is unused and differs from the prod CMD (`--enable-source-maps`), the same dead-script case as web's `start` removed in round 3 (low). Delete it. Source: acceptance-auditor. [apps/api/package.json:14]
+- [x] [Review][Patch] The `deferred-work.md` correct-course entry mixes the dev-access decision with the product requirement: it says to drop Story 1.5's 375 px phone-viewport requirement "if that no longer applies" (low). Drop only the "on a phone" access wording; keep the 375 px layout requirement unless the product owner removes it. Source: blind-hunter. [deferred-work.md]
+- [x] [Review][Defer] `apps/api/prisma.config.ts` is outside every tsconfig (`include: ["src"]`), so Story 1.2's typecheck gate would miss errors in it [apps/api/tsconfig.json:22] — deferred: Story 1.2 owns the typecheck gate; cover the file there.
+- [x] [Review][Defer] No planned check covers the round-3/4 fixes: the Caddy `127.0.0.1`/`[::1]` site addresses and `init: true` on every long-running service [Caddyfile:6, compose.yaml:10,69, compose.dev.yaml:15] — deferred: Story 1.2 CI smoke job should also curl `https://127.0.0.1/api/v1/health` and assert `init: true` in `docker compose config --format json`.
+
+**Rejected (round 4)**
+
+- blind: Spec Verification has no web missing-env command, and triage #12's `down -v` note doesn't exist. The fix edits the spec under review (the user was told this recurs).
+- blind: web discards the validated env; export a `getEnv()`. low: speculative for Story 1.5; nothing reads the env yet.
+- blind: Add a "stale" banner to `epic-1-context.md`. The fix edits a context doc, and it's already covered by the correct-course deferred entry.
+- blind: Story marked `done` while review rounds are open. false: every round with open patches set it back to `in-progress`.
+- blind: Single-port check runs on `compose.yaml` only, not the dev override. low: `docker compose -f compose.yaml -f compose.dev.yaml config` was verified to publish only `proxy`; the fix extends spec Verification.
+- blind: CA-trust steps are macOS-only. low: the team develops on macOS.
+- blind: `engines.node >=24` is not enforced. low: pnpm warns; the app runs only in Node 24 images.

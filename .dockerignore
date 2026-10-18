@@ -4,8 +4,8 @@
 **/*.tsbuildinfo
 apps/api/src/generated
 .git
-.env
-.env.*
+**/.env
+**/.env.*
 _bmad
 _bmad-output
 .claude

@@ -1,5 +1,13 @@
 # Dev override: docker compose -f compose.yaml -f compose.dev.yaml up
+# The app runs only in containers (dev and prod), never on the host.
 # Source is bind-mounted; node_modules live in named volumes (never from the host).
+# Editor: run `pnpm install` once on the host for types only. Generated files
+# (packages/shared/dist, apps/api/src/generated, apps/web/next-env.d.ts) reach the
+# host through the bind mount once this stack has started.
+# After a dependency change, the *-modules volumes still hold the old node_modules
+# (`up --build` doesn't refresh them). Remove only those, not postgres-data:
+#   docker compose -f compose.yaml -f compose.dev.yaml down
+#   docker volume ls -q | grep -- '-modules$' | xargs docker volume rm
 
 services:
   shared:
@@ -8,6 +16,7 @@ services:
       dockerfile: apps/api/Dockerfile
       target: dev
     image: restaurant-api:dev
+    init: true
     command: ["pnpm", "--filter", "@restaurant/shared", "dev"]
     volumes:
       - .:/repo

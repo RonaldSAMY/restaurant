@@ -11,7 +11,6 @@
   "scripts": {
     "build": "prisma generate && nest build",
     "dev": "prisma generate && nest start --watch --preserveWatchOutput",
-    "start": "node dist/main",
     "seed": "node dist/seed/seed",
     "migrate": "prisma migrate deploy"
   },

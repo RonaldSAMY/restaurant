@@ -7,6 +7,6 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
-    "dev": "pnpm -r --parallel run dev"
+    "dev": "docker compose -f compose.yaml -f compose.dev.yaml up"
   }
 }

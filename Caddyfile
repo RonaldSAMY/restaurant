@@ -1,4 +1,9 @@
-localhost {
+# To stop browser certificate warnings, trust Caddy's local root CA on the host:
+#   docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt /tmp/caddy-root.crt
+#   sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/caddy-root.crt
+# Repeat after the caddy-data volume is reset (`down -v` makes a new root). Firefox
+# uses its own trust store: import the file under Settings > Certificates.
+localhost, 127.0.0.1, [::1] {
 	tls internal
 
 	# Forwarded unmodified; the api owns the /api/v1 prefix.
