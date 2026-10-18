@@ -83,3 +83,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
   summary: With the first web form showing inline field errors, export `ValidationIssueSchema` (`{path, message}`) from `packages/shared` and type the `VALIDATION_FAILED` `details` with it.
   evidence: `ErrorEnvelopeSchema.details` is `unknown`, so web would parse field issues untyped.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-menu-api-with-cache-and-seed.md`
+  summary: No automated test guards `disableOfflineQueue: true` on the Redis client (menu requests would hang instead of 500 while Redis reconnects).
+  evidence: The Redis-down test destroys the client, which rejects regardless of the flag; a real guard needs a harness that can stop or sever Redis mid-run (e.g. a stoppable redis-test container or CLIENT KILL with deterministic reconnect timing).

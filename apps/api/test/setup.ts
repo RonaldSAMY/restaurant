@@ -7,6 +7,11 @@ if (!process.env.TEST_DATABASE_URL || !process.env.TEST_REDIS_URL) {
   throw new Error('TEST_DATABASE_URL and TEST_REDIS_URL must be set');
 }
 
+// The app under test reads its connections through parseEnv().
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+process.env.REDIS_URL = process.env.TEST_REDIS_URL;
+process.env.PORT ??= '3000';
+
 /** Connection to the test database, shared by every test in the file. */
 const db = new Client({ connectionString: process.env.TEST_DATABASE_URL });
 

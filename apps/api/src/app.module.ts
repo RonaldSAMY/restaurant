@@ -4,6 +4,7 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { DefaultDenyGuard } from './common/default-deny.guard';
 import { ErrorEnvelopeFilter } from './common/error-envelope.filter';
 import { HealthController } from './health/health.controller';
+import { MenuModule } from './menu/menu.module';
 
 /**
  * Root module of the api. Registers the global conventions once, so tests
@@ -11,6 +12,7 @@ import { HealthController } from './health/health.controller';
  * guard and Zod body validation.
  */
 @Module({
+  imports: [MenuModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, useClass: ErrorEnvelopeFilter },

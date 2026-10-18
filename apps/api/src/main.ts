@@ -9,6 +9,7 @@ async function bootstrap(): Promise<void> {
   const env = parseEnv();
   const app = await NestFactory.create(AppModule);
   configureApp(app);
+  app.enableShutdownHooks();
   await app.listen(env.PORT);
   new Logger('Bootstrap').log(`Restaurant api listening on ${env.PORT}`);
 }
