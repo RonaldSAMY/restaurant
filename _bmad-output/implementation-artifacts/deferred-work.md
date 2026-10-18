@@ -23,6 +23,7 @@
 ## Deferred from: code review of spec-1-1-running-stack-skeleton, round 2 (2026-10-18)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-running-stack-skeleton.md`
+  status: resolved 2026-10-18 — applied via `planning-artifacts/sprint-change-proposal-2026-10-18.md`
   summary: Reconcile the planning docs with the Docker-only decision before Story 1.2 (run `bmad-correct-course`). `epic-1-context.md` publishes postgres-test/redis-test on `127.0.0.1:55432/56379` and uses CI service containers (host-run tests); the spine says `prisma.config.ts` loads env. Also record the root-script amendment (spec Change Log, 2026-10-18): spine AD-1 and `epic-1-context.md` still say "root scripts use `pnpm -r`", but root `dev` now runs `docker compose -f compose.yaml -f compose.dev.yaml up`; do not revert it. Also drop the "opening `https://localhost` on a phone" access wording from the epic goal: the public pages only need to open in a browser on the host (decided in the 1.1 review). Keep Story 1.5's 375 px layout requirement; that is a product requirement, removable only by the product owner.
   evidence: The 1.1 review decided the app and tests run only in containers; the host only runs `pnpm install` for the editor.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-1-running-stack-skeleton.md`

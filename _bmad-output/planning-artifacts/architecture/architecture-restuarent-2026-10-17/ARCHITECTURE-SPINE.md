@@ -62,7 +62,7 @@ Arrows are the only allowed import directions; no `forwardRef`. `packages/shared
 
 - **Binds:** all
 - **Prevents:** per-app copies of shared code; divergent package managers or build orchestration.
-- **Rule:** One repo, pnpm workspaces only (no Turborepo/Nx). Exactly three workspace packages: `apps/api`, `apps/web`, `packages/shared` (name `@restaurant/shared`), linked with `workspace:*`. pnpm is pinned via `packageManager` in the root `package.json` (corepack in images). `pnpm-workspace.yaml` sets `injectWorkspacePackages: true`. Root scripts use `pnpm -r` (topological). Prod images: api via `pnpm deploy --filter api --prod <dir>`; web via Next `output: 'standalone'`.
+- **Rule:** One repo, pnpm workspaces only (no Turborepo/Nx). Exactly three workspace packages: `apps/api`, `apps/web`, `packages/shared` (name `@restaurant/shared`), linked with `workspace:*`. pnpm is pinned via `packageManager` in the root `package.json` (corepack in images). `pnpm-workspace.yaml` sets `injectWorkspacePackages: true`. Root scripts use `pnpm -r` (topological), except `dev`, which runs `docker compose -f compose.yaml -f compose.dev.yaml up`. Apps and tests run only in containers; the host runs only `pnpm install` (editor type resolution). Prod images: api via `pnpm deploy --filter api --prod <dir>`; web via Next `output: 'standalone'`.
 
 ### AD-2 — `packages/shared` is the wire contract, written as Zod `[ADOPTED]`
 
@@ -194,7 +194,7 @@ sequenceDiagram
   - `compose.yaml`: `proxy` (Caddy, `tls internal`, `/data` on a named volume), `web`, `api`, `postgres`, `redis`, one-shot `migrate` (`prisma migrate deploy`) then `seed`. Order: `postgres`/`redis` healthy → `migrate` done → `seed` done → `api` healthy (`GET /api/v1/health`) → `web` → `proxy`.
   - Only `proxy` publishes a host port (443). Caddy forwards `/api/*` **unmodified** to `api:3000`; everything else to `web:3000`. The api owns the `/api/v1` prefix (`setGlobalPrefix`) and the Socket.IO path.
   - `compose.dev.yaml` (override): `web`/`api` on the Dockerfile `dev` target, source bind-mounted, `node_modules` in named volumes (never from the host), hot reload, plus a `shared` watcher.
-  - `compose.test.yaml` (override): adds `postgres-test` / `redis-test` published on `127.0.0.1:55432` / `127.0.0.1:56379` (the only exception to proxy-only) and points `api`/`migrate`/`seed` at them.
+  - `compose.test.yaml` (override): adds unpublished `postgres-test` / `redis-test` and a one-shot `api-test` runner (api `dev` target) with `TEST_DATABASE_URL` / `TEST_REDIS_URL` pointing at them over the compose network. Integration runs via `docker compose -f compose.yaml -f compose.test.yaml run --rm api-test`. Proxy-only has no exceptions.
   - One multi-stage Dockerfile per app (`dev`, `prod`). Postgres volumes mount at `/var/lib/postgresql` (PG 18 image layout).
 
 ```mermaid
@@ -219,8 +219,8 @@ flowchart LR
 | Level | Tool | Scope | Infra |
 | --- | --- | --- | --- |
 | Unit | Vitest (`unplugin-swc` in api) | domain classes, services with in-memory port fakes, shared schemas, web components (Testing Library) | none |
-| Integration | Vitest + Supertest on the real Nest app | every endpoint; PRD §5 list: FR-2, FR-3 incl. expiry, FR-4 24 h window, FR-6 login/refresh/logout/revocation, FR-7 every protected route rejects guest + anonymous, FR-9 | real Postgres + Redis at `TEST_DATABASE_URL` / `TEST_REDIS_URL` (`localhost:55432` / `:56379`, locally and in CI) |
-| E2E | Playwright (`ignoreHTTPSErrors`) | UJ-1 + UJ-2 in two browser contexts, incl. < 2 s live update | full compose stack at `https://localhost` |
+| Integration | Vitest + Supertest on the real Nest app | every endpoint; PRD §5 list: FR-2, FR-3 incl. expiry, FR-4 24 h window, FR-6 login/refresh/logout/revocation, FR-7 every protected route rejects guest + anonymous, FR-9 | real Postgres + Redis in `postgres-test` / `redis-test` (compose network, via `TEST_DATABASE_URL` / `TEST_REDIS_URL`); runs inside the `api-test` container, locally and in CI |
+| E2E | Playwright (`ignoreHTTPSErrors`) | UJ-1 + UJ-2 in two browser contexts, incl. < 2 s live update | full compose stack; Playwright runs in a container (runner details in Story 3.5) |
 
 - Integration/e2e never mock Postgres or Redis. Integration runs with `fileParallelism: false`; `globalSetup` runs `prisma migrate deploy` once; each file truncates tables and flushes Redis in `beforeEach`, then builds its data with TypeScript fixture builders (`buildMenuItem`, `buildOrder`, `buildStaffUser`) through Prisma. No file depends on another's data.
 - **Expiry is decided in code against an injected `Clock` port**: guest `placedAt + 24 h`, reference lookup window, and JWT verification (`clockTimestamp` from `Clock`). Redis TTLs are cleanup only, set from the same `Clock`. Tests advance the fake clock.
@@ -236,7 +236,7 @@ flowchart LR
 
 - **Binds:** repo
 - **Prevents:** merging code that only passes on one machine.
-- **Rule:** One workflow on every push/PR: install (frozen lockfile) → lint + format check → typecheck → unit → integration (Postgres + Redis service containers on 55432 / 56379) → build `api` and `web` prod images. Playwright e2e on `main` and nightly against the compose stack.
+- **Rule:** One workflow on every push/PR: install (frozen lockfile) → lint + format check → typecheck → unit → integration (`docker compose … run --rm api-test`, same command as local) → build `api` and `web` prod images. Playwright e2e on `main` and nightly against the compose stack.
 
 ### AD-19 — API surface
 
@@ -288,7 +288,7 @@ flowchart LR
 | Next.js | 16.4.x (`output: 'standalone'`) |
 | React | 19.3.x |
 | Zod | 4.x |
-| Prisma ORM (`prisma`, `@prisma/client`, `@prisma/adapter-pg`, `pg`) | ^7.10 — never unpinned (npm `latest` is 8 RC); `apps/api/prisma.config.ts` loads env; generator `prisma-client`, `output ../src/generated/prisma`, `moduleFormat = "cjs"` |
+| Prisma ORM (`prisma`, `@prisma/client`, `@prisma/adapter-pg`, `pg`) | ^7.10 — never unpinned (npm `latest` is 8 RC); `apps/api/prisma.config.ts` reads `DATABASE_URL` from the process env (compose `env_file`), never loads `.env`; generator `prisma-client`, `output ../src/generated/prisma`, `moduleFormat = "cjs"` |
 | argon2 | 0.45.x |
 | PostgreSQL (image) | `postgres:18.6-alpine` |
 | Redis (image) | `redis:8.10.2-alpine` |

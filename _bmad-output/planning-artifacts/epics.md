@@ -59,10 +59,10 @@ NFR8: Scope — 2-day timebox; single kitchen, no payment, no Cancelled state; G
 - AD-12: Menu page server-rendered, `force-dynamic`, via `API_INTERNAL_URL`; browser code uses same-origin `/api/v1` and Socket.IO; env parsed at server start, `next build` needs no secrets; kitchen protection via 401 flow, not `proxy.ts`.
 - AD-13: one error envelope `{ error: { code, message, details? } }` from a global filter; closed `ErrorCode` set (VALIDATION_FAILED, MENU_ITEM_NOT_FOUND, UNAUTHENTICATED, INVALID_CREDENTIALS, FORBIDDEN, ORDER_NOT_FOUND, ORDER_ALREADY_OPEN, INVALID_TRANSITION, RATE_LIMITED, INTERNAL).
 - AD-14: Zod env parsing at start, fail fast; shared `.env`; committed `.env.example`; no secret defaults.
-- AD-15: `compose.yaml` (Caddy proxy `tls internal`, web, api, postgres, redis, one-shot migrate → seed, health-ordered startup; only proxy publishes 443; `/api/*` → api unmodified); `compose.dev.yaml` (dev targets, bind mounts, named `node_modules`, hot reload, shared watcher); `compose.test.yaml` (postgres-test/redis-test on 127.0.0.1:55432/56379); multi-stage Dockerfile per app.
+- AD-15: `compose.yaml` (Caddy proxy `tls internal`, web, api, postgres, redis, one-shot migrate → seed, health-ordered startup; only proxy publishes 443; `/api/*` → api unmodified); `compose.dev.yaml` (dev targets, bind mounts, named `node_modules`, hot reload, shared watcher); `compose.test.yaml` (unpublished postgres-test/redis-test + one-shot `api-test` runner); multi-stage Dockerfile per app.
 - AD-16: Vitest unit (domain, services with in-memory fakes, schemas, web components); Vitest + Supertest integration on real Nest app against real Postgres + Redis, `fileParallelism: false`, truncate/flush per file, fixture builders; Playwright e2e for UJ-1 + UJ-2 in two contexts on full stack; injected `Clock` port drives all expiry; cookie helper for Supertest.
 - AD-17: TSDoc on every symbol; one root ESLint flat config (type-aware) + Prettier; `pnpm lint`, `format:check`, `typecheck` zero warnings.
-- AD-18: GitHub Actions on push/PR: frozen install → lint + format → typecheck → unit → integration (service containers 55432/56379) → build prod images; Playwright e2e on `main` + nightly.
+- AD-18: GitHub Actions on push/PR: frozen install → lint + format → typecheck → unit → integration (in compose `api-test`) → build prod images; Playwright e2e on `main` + nightly.
 - AD-19: fixed endpoint table (health, menu, orders, orders/current, orders/by-reference/:reference, auth login/refresh/logout/me, kitchen/orders, kitchen/orders/:id/status) with named shared schemas (`GuestOrderView`, `KitchenOrder`, `PlaceOrderRequest`, `LoginRequest`, `StaffMe`, `AdvanceStatusRequest`, `MenuResponse`).
 - Data model: `MenuItem`, `Order`, `OrderItem`, `StaffUser` per spine ER diagram; Prisma 7 with `prisma.config.ts`, client output `src/generated/prisma` (cjs).
 - Logging: Nest `Logger` per class; order lines include `reference`; never log tokens, passwords, cookies.
@@ -87,7 +87,7 @@ FR9: Epic 3 - Forward-only status changes, Collected final, one concurrent winne
 ## Epic List
 
 ### Epic 1: Guests can browse the Menu
-Anyone opens `https://localhost` on a phone and sees the seeded Menu grouped by category, served from cache; re-seeding shows new items. Lays the foundation per the spine build order: workspace, compose stack, quality gates + CI, shared contracts.
+Anyone opens `https://localhost` in a browser on the host and sees the seeded Menu grouped by category, served from cache; re-seeding shows new items. Lays the foundation per the spine build order: workspace, compose stack, quality gates + CI, shared contracts.
 **FRs covered:** FR1
 
 ### Epic 2: Guests order and track without an account
@@ -100,7 +100,7 @@ Kitchen Staff log in, see all open Orders grouped Received / Preparing / Ready, 
 
 ## Epic 1: Guests can browse the Menu
 
-Anyone opens `https://localhost` on a phone and sees the seeded Menu grouped by category, served from cache; re-seeding shows new items. Lays the foundation per the spine build order. Creates only the `MenuItem` table.
+Anyone opens `https://localhost` in a browser on the host and sees the seeded Menu grouped by category, served from cache; re-seeding shows new items. Lays the foundation per the spine build order. Creates only the `MenuItem` table.
 
 ### Story 1.1: Running stack skeleton
 
@@ -165,8 +165,8 @@ So that nothing merges that only works on one machine.
 **When** I run `pnpm test`
 **Then** unit tests run with no infrastructure.
 
-**Given** `compose.test.yaml` with `postgres-test` / `redis-test` on `127.0.0.1:55432` / `:56379`
-**When** I run the api integration suite
+**Given** `compose.test.yaml` with unpublished `postgres-test` / `redis-test` and a one-shot `api-test` runner
+**When** I run `docker compose -f compose.yaml -f compose.test.yaml run --rm api-test`
 **Then** it runs against them with `fileParallelism: false`, `globalSetup` running `prisma migrate deploy` once, and each file truncating tables and flushing Redis in `beforeEach`
 **And** a `/health` integration test passes via Supertest.
 
@@ -180,7 +180,11 @@ So that nothing merges that only works on one machine.
 
 **Given** `.github/workflows/ci.yml`
 **When** I push or open a PR
-**Then** it runs frozen install → lint + format check → typecheck → unit → integration (Postgres + Redis service containers on 55432 / 56379) → build api and web prod images.
+**Then** it runs frozen install → lint + format check → typecheck → unit → integration (the same `api-test` compose command) → build api and web prod images.
+
+**Given** the Story 1.2 entries in `implementation-artifacts/deferred-work.md` (env fail-fast tests, compose smoke job, sentinel env file check, `prisma.config.ts` typecheck, `init: true` assertion)
+**When** Story 1.2 is specced
+**Then** each is in scope or explicitly re-deferred.
 
 ### Story 1.3: Shared contracts and API conventions
 
