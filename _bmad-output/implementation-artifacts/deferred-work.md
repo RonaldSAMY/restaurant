@@ -87,3 +87,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-4-menu-api-with-cache-and-seed.md`
   summary: No automated test guards `disableOfflineQueue: true` on the Redis client (menu requests would hang instead of 500 while Redis reconnects).
   evidence: The Redis-down test destroys the client, which rejects regardless of the flag; a real guard needs a harness that can stop or sever Redis mid-run (e.g. a stoppable redis-test container or CLIENT KILL with deterministic reconnect timing).
+
+## Deferred from: code review of spec-1-4-menu-api-with-cache-and-seed.md (2026-10-18)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-menu-api-with-cache-and-seed.md`
+  summary: The `seed.ts` entry point (what compose's `seed` service runs) is executed by no test; removing its `seedMenu` call or passing `[]` passes every check and a fresh stack serves an empty Menu.
+  evidence: `menu.int-spec.ts` rebuilds the entry inline via `SeedModule` + `seedMenu`; CI only `test -f dist/seed/seed.js`. Needs an exported `seed()` with an import guard, or a subprocess test.

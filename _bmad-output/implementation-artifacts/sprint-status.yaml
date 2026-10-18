@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-17-2026 17:24
-last_updated: 10-18-2026 20:30
+last_updated: 10-18-2026 21:30
 project: restuarent
 project_key: NOKEY
 tracking_system: file-system
@@ -39,7 +39,7 @@ development_status:
   1-1-running-stack-skeleton: done
   1-2-quality-gates-test-harness-and-ci: done
   1-3-shared-contracts-and-api-conventions: done
-  1-4-menu-api-with-cache-and-seed: review
+  1-4-menu-api-with-cache-and-seed: done
   1-5-public-menu-page: backlog
   epic-1-retrospective: optional
 

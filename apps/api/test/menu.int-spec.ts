@@ -163,14 +163,31 @@ describe('GET /api/v1/menu', () => {
     await expect(downApp.close()).resolves.toBeUndefined();
   });
 
-  it('seeds through SeedModule and leaves menu:v1 absent', async () => {
+  it('returns the 500 INTERNAL envelope when Postgres is down', async () => {
+    const url = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = 'postgresql://nobody:nothing@127.0.0.1:1/none';
+    const downApp = await bootApp().finally(() => {
+      process.env.DATABASE_URL = url;
+    });
+
+    const res = await request(downApp.getHttpServer()).get('/api/v1/menu');
+
+    expect(res.status).toBe(500);
+    expect(ErrorEnvelopeSchema.parse(res.body).error.code).toBe('INTERNAL');
+    await downApp.close();
+  });
+
+  it('seeds through SeedModule and invalidates a primed menu:v1', async () => {
+    await buildMenuItem(prisma);
+    await getMenu();
+    expect(await redis.exists('menu:v1')).toBe(1);
     const ctx = await NestFactory.createApplicationContext(SeedModule, {
       logger: false,
     });
     await seedMenu(ctx.get(PrismaService), ctx.get(MenuCache), MENU_SEED_ITEMS);
     await ctx.close();
 
-    expect(await prisma.menuItem.count()).toBe(MENU_SEED_ITEMS.length);
+    expect(await prisma.menuItem.count()).toBe(MENU_SEED_ITEMS.length + 1);
     expect(await redis.exists('menu:v1')).toBe(0);
   });
 });

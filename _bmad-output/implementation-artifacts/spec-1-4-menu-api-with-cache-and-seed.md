@@ -68,6 +68,33 @@ context:
 - Given `docker compose up` on a fresh volume, when `GET https://localhost/api/v1/menu` runs, then the seeded Menu comes back and `redis-cli GET menu:v1` returns it.
 - Given the full gate (`lint`, `format:check`, `typecheck`, `test`, `test:int`), when it runs, then every step passes with zero warnings.
 
+### Review Findings
+
+- [x] [Review][Patch] Prod image never loads the runtime deps (`pg`, `redis`, `@prisma/adapter-pg`); CI only `test -f`s the entry points, so moving one back to devDependencies ships a crashing api/seed green [.github/workflows/ci.yml:33]
+- [x] [Review][Patch] "Redis/DB down" matrix row: DB-down half untested — add a test booting the app with an unreachable `DATABASE_URL` and asserting the 500 `INTERNAL` envelope on a cache miss [apps/api/test/menu.int-spec.ts:156]
+- [x] [Review][Patch] SeedModule test's `menu:v1` absent assertion is vacuous (Redis is flushed per test and the cache is never primed) — prime the cache first and assert it existed [apps/api/test/menu.int-spec.ts:167]
+- [x] [Review][Defer] `seed.ts` entry (what compose runs) is executed by no test; dropping the `seedMenu` call passes everything [apps/api/src/seed/seed.ts:9] — deferred: needs `seed()` export + import guard or a subprocess harness; AC1 is checked manually
+
+Rejected:
+- low — `menu:v1` read not re-validated (corrupt key 500s forever): only `MenuCache.set` writes it, from a typed `MenuResponse` (same as triage #2).
+- false — seed data never checked against shared schema: the re-seed test runs `MenuResponseSchema.parse` over every seeded item; the fixed UUIDs are valid v4/variant.
+- low — miss-then-seed stale-cache race: compose runs seed before api; already logged as triage #3.
+- low — no DB `CHECK (priceCents >= 0)`: only writer is constant seed data (triage #4).
+- low — `invalidate()` failing after commit: seed exits 1 loudly, api never starts (triage #13).
+- low — Redis connect retries forever at boot: compose gates on `service_healthy`; error handler logs each failure (triage #14).
+- low — `app.close()` in `finally` could mask the seed error: double-failure only, adds a branch.
+- low — test leaks `downApp`/`ctx` when an assertion fails: failure-only path, vitest still reports it.
+- rejected (edits spec) — spec `status: done` vs sprint `review`: set by this workflow's status sync.
+- false — `MenuCache` doc vs epic "MenuService is the only reader/writer": spec Always explicitly allows seed `invalidate()`.
+- low — `new Logger('Seed')`: `seed` is a function, no class name to use.
+- false — AC1 unverifiable from diff: spec Verification makes it a manual check; automation gaps tracked by the prod-image patch and the seed.ts defer.
+- low — unthrottled Redis error logging during outages: noise only.
+- low — no `@@unique([category, name])`: no writer produces duplicates.
+- false — `/health` ignores Postgres/Redis: documented as liveness, pre-existing and unchanged.
+- duplicate — `disableOfflineQueue` unguarded by a test: already in triage #18 and deferred-work.
+- low — `enableShutdownHooks()` untested: shutdown still exits; signal test costs more than the risk.
+- low — `packages/shared` has no unit tests: schemas exercised via `MenuResponseSchema.parse` in int tests.
+
 ## Design Notes
 
 - **Ordering (my call, visible in 1.5):** query with `orderBy: [{category:'asc'},{name:'asc'}]` and group in that order, i.e. alphabetical categories and items. A custom course order (Starters → Mains → Desserts) would need a `sortOrder` column the data model does not have. Say so at approval if you want it.
