@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import { APP_NAME } from '@restaurant/shared';
 
 /** Page metadata shared by every route. */
-export const metadata = { title: APP_NAME };
+export const metadata = { title: 'Restaurant' };
 
 /** Root HTML shell for every page. */
 export default function RootLayout({ children }: { children: ReactNode }) {

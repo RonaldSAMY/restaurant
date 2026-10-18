@@ -65,3 +65,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-2-quality-gates-test-harness-and-ci.md`
   summary: The test runners in `compose.test.yaml` also run as root and write `packages/shared/dist` and `src/generated` into the bind mount; include them in the Linux UID/GID fix.
   evidence: Same cause as the 1.1 Linux UID/GID deferral; harmless on macOS Docker Desktop.
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-shared-contracts-and-api-conventions.md`
+  summary: The error filter logs the full stack, whose first line is the error message; Prisma errors may put call arguments (e.g. password hashes) there.
+  evidence: Unverified, medium if true. Settle when Story 3.1 makes the first Prisma write with sensitive data by throwing a Prisma validation error through the filter and inspecting the log; redact or log name + frames only if leaked.
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-3-shared-contracts-and-api-conventions.md`
+  summary: The global `@Catch()` ErrorEnvelopeFilter may also run for the planned Socket.IO gateway, where `switchToHttp().getResponse()` is not an express Response.
+  evidence: Unverified, medium if true. Settle when the realtime gateway lands by checking whether Nest applies APP_FILTER to WS handlers; if so, guard with `host.getType() !== 'http'`.
