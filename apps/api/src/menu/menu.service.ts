@@ -37,4 +37,17 @@ export class MenuService {
     if (categories.length > 0) await this.cache.set(menu);
     return menu;
   }
+
+  /**
+   * Returns the Menu Items with the given ids, read from Postgres (not the
+   * cache). Unknown ids are simply absent from the result.
+   */
+  findItems(
+    ids: string[],
+  ): Promise<{ id: string; name: string; priceCents: number }[]> {
+    return this.prisma.menuItem.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, priceCents: true },
+    });
+  }
 }

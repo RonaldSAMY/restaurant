@@ -16,4 +16,39 @@ model MenuItem {
   description String
   category    String
   priceCents  Int
+  orderItems  OrderItem[]
+}
+
+/// Mirrors shared `OrderStatus`.
+enum OrderStatus {
+  RECEIVED
+  PREPARING
+  READY
+  COLLECTED
+}
+
+/// A Guest's Order. `reference` is the Guest-facing id; `id` is never exposed.
+model Order {
+  id         String      @id @default(uuid()) @db.Uuid
+  reference  String      @unique
+  guestName  String
+  status     OrderStatus
+  totalCents Int
+  placedAt   DateTime    @db.Timestamptz(3)
+  items      OrderItem[]
+}
+
+/// One Order line. `name` and `unitPriceCents` are snapshots of the Menu Item.
+model OrderItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @db.Uuid
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  menuItemId     String   @db.Uuid
+  menuItem       MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  name           String
+  quantity       Int
+  unitPriceCents Int
+
+  @@index([orderId])
+  @@index([menuItemId])
 }

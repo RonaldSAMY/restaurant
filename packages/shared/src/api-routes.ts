@@ -5,7 +5,11 @@
 export const API_PREFIX = 'api/v1';
 
 /** Endpoint paths relative to {@link API_PREFIX}. */
-export const ApiRoutes = { health: 'health', menu: 'menu' } as const;
+export const ApiRoutes = {
+  health: 'health',
+  menu: 'menu',
+  orders: 'orders',
+} as const;
 
 /** One of the {@link ApiRoutes} values. */
 export type ApiRoute = (typeof ApiRoutes)[keyof typeof ApiRoutes];

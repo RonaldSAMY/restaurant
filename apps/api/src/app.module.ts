@@ -5,6 +5,7 @@ import { DefaultDenyGuard } from './common/default-deny.guard';
 import { ErrorEnvelopeFilter } from './common/error-envelope.filter';
 import { HealthController } from './health/health.controller';
 import { MenuModule } from './menu/menu.module';
+import { OrdersModule } from './orders/orders.module';
 
 /**
  * Root module of the api. Registers the global conventions once, so tests
@@ -12,7 +13,7 @@ import { MenuModule } from './menu/menu.module';
  * guard and Zod body validation.
  */
 @Module({
-  imports: [MenuModule],
+  imports: [MenuModule, OrdersModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, useClass: ErrorEnvelopeFilter },
