@@ -24,7 +24,7 @@ export interface NewOrder {
   totalCents: number;
   /** Placement time from the `Clock`. */
   placedAt: Date;
-  /** Order lines. */
+  /** Order lines, in basket order. */
   items: NewOrderItem[];
 }
 
@@ -41,4 +41,7 @@ export abstract class OrderRepository {
    * `reference` fails with the driver's unique-violation error.
    */
   abstract create(order: NewOrder): Promise<StoredOrder>;
+
+  /** Returns the Order with its items in basket order, or `null`. */
+  abstract findById(id: string): Promise<StoredOrder | null>;
 }

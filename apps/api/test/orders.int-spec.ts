@@ -110,12 +110,15 @@ describe('POST /api/v1/orders', () => {
       placedAt: t0,
     });
     expect(
-      stored.items.map(({ menuItemId, name, quantity, unitPriceCents }) => ({
-        menuItemId,
-        name,
-        quantity,
-        unitPriceCents,
-      })),
+      stored.items.map(
+        ({ menuItemId, name, quantity, unitPriceCents, position }) => ({
+          menuItemId,
+          name,
+          quantity,
+          unitPriceCents,
+          position,
+        }),
+      ),
     ).toEqual(
       expect.arrayContaining([
         {
@@ -123,8 +126,15 @@ describe('POST /api/v1/orders', () => {
           name: 'Pizza',
           quantity: 2,
           unitPriceCents: 1200,
+          position: 0,
         },
-        { menuItemId: cola.id, name: 'Cola', quantity: 1, unitPriceCents: 350 },
+        {
+          menuItemId: cola.id,
+          name: 'Cola',
+          quantity: 1,
+          unitPriceCents: 350,
+          position: 1,
+        },
       ]),
     );
     expect(stored.items).toHaveLength(2);
@@ -267,6 +277,7 @@ describe('POST /api/v1/orders', () => {
     ['Order_totalCents_check', { totalCents: -1 }, {}],
     ['OrderItem_quantity_check', {}, { quantity: 0 }],
     ['OrderItem_unitPriceCents_check', {}, { unitPriceCents: -1 }],
+    ['OrderItem_position_check', {}, { position: -1 }],
   ])('enforces %s in the database', async (constraint, order, item) => {
     const create = prisma.order.create({
       data: {
@@ -282,6 +293,7 @@ describe('POST /api/v1/orders', () => {
             name: 'Cola',
             quantity: 1,
             unitPriceCents: 0,
+            position: 0,
             ...item,
           },
         },

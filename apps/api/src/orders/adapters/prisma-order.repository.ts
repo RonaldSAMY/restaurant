@@ -6,6 +6,9 @@ import {
   type StoredOrder,
 } from '../ports/order-repository';
 
+/** Every Order read returns its items in basket order. */
+const ITEMS_IN_ORDER = { items: { orderBy: { position: 'asc' } } } as const;
+
 /** {@link OrderRepository} on Postgres through Prisma. */
 @Injectable()
 export class PrismaOrderRepository extends OrderRepository {
@@ -15,13 +18,27 @@ export class PrismaOrderRepository extends OrderRepository {
   }
 
   /**
-   * Inserts the Order with its items in one nested create (atomic). A `P2002`
-   * on `reference` propagates to the caller.
+   * Inserts the Order with its items in one nested create (atomic), storing
+   * each item's array index as `position`. A `P2002` on `reference`
+   * propagates to the caller.
    */
   create({ items, ...order }: NewOrder): Promise<StoredOrder> {
     return this.prisma.order.create({
-      data: { ...order, items: { create: items } },
-      include: { items: true },
+      data: {
+        ...order,
+        items: {
+          create: items.map((item, position) => ({ ...item, position })),
+        },
+      },
+      include: ITEMS_IN_ORDER,
+    });
+  }
+
+  /** Returns the Order with its items, or `null` when it does not exist. */
+  findById(id: string): Promise<StoredOrder | null> {
+    return this.prisma.order.findUnique({
+      where: { id },
+      include: ITEMS_IN_ORDER,
     });
   }
 }

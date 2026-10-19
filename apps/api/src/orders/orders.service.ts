@@ -4,7 +4,9 @@ import { Clock } from '../common/clock';
 import { DomainError } from '../common/domain-error';
 import { Prisma } from '../generated/prisma/client';
 import { MenuService } from '../menu/menu.service';
+import { GuestSessionPolicy } from './domain/guest-session-policy';
 import { OrderReference } from './domain/order-reference';
+import { GuestSessionService } from './guest-session.service';
 import {
   type NewOrderItem,
   OrderRepository,
@@ -17,27 +19,49 @@ const MAX_QUANTITY = 99;
 /** Inserts tried before a reference collision is given up on. */
 const MAX_ATTEMPTS = 5;
 
+/** Result of a placement: the Guest view and the new Guest Session. */
+export interface PlacedOrder {
+  /** Guest view of the new Order. */
+  view: GuestOrderView;
+  /** Id of the session opened for it (the cookie value). */
+  sid: string;
+  /** When the session ends at the latest (placedAt + 24 h). */
+  expiresAt: Date;
+}
+
 /** Order use cases. */
 @Injectable()
 export class OrdersService {
   /** Logs placements by reference only. */
   private readonly logger = new Logger(OrdersService.name);
 
-  /** Receives the Menu, the Order store and the clock. */
+  /** Receives the Menu, the Order store, the Guest Sessions and the clock. */
   constructor(
     private readonly menu: MenuService,
     private readonly orders: OrderRepository,
+    private readonly sessions: GuestSessionService,
     private readonly clock: Clock,
   ) {}
 
   /**
    * Places an Order: merges duplicate lines, prices them from the Menu,
-   * stores the Order as `RECEIVED` (retrying reference collisions) and
-   * returns the Guest view.
-   * @throws DomainError `VALIDATION_FAILED` when a merged quantity exceeds 99,
+   * stores the Order as `RECEIVED` (retrying reference collisions), opens a
+   * Guest Session for it and returns the Guest view with the session.
+   * @param sid - the caller's current session id, if any; a stale one is ignored.
+   * @throws DomainError `ORDER_ALREADY_OPEN` while `sid`'s session is open,
+   *   `VALIDATION_FAILED` when a merged quantity exceeds 99,
    *   `MENU_ITEM_NOT_FOUND` when a Menu Item does not exist.
    */
-  async place(req: PlaceOrderRequest): Promise<GuestOrderView> {
+  async place(req: PlaceOrderRequest, sid?: string): Promise<PlacedOrder> {
+    // ponytail: two concurrent POSTs can both pass this check and create two
+    // Orders (last cookie wins); a `SET NX` placement lock fixes it if it matters.
+    const open = await this.sessions.resolve(sid);
+    if (open) {
+      throw new DomainError('ORDER_ALREADY_OPEN', 'An Order is already open', {
+        reference: open.order.reference,
+      });
+    }
+
     const quantities = new Map<string, number>();
     for (const { menuItemId, quantity } of req.items) {
       quantities.set(menuItemId, (quantities.get(menuItemId) ?? 0) + quantity);
@@ -73,7 +97,23 @@ export class OrdersService {
 
     const order = await this.insert(req.guestName, items, totalCents);
     this.logger.log(`Order placed reference=${order.reference}`);
-    return toGuestView(order, items);
+    // ponytail: insert and Redis SET are not atomic; a failed SET (500) leaves
+    // an Order without a session, reachable by reference from Story 2.3.
+    const newSid = await this.sessions.open(order);
+    return {
+      view: toGuestView(order),
+      sid: newSid,
+      expiresAt: GuestSessionPolicy.expiresAt(order.placedAt),
+    };
+  }
+
+  /** Returns the Guest view of the session's Order (`orderId` from the principal). */
+  async current(orderId: string): Promise<GuestOrderView> {
+    const order = await this.orders.findById(orderId);
+    if (!order) {
+      throw new DomainError('UNAUTHENTICATED', 'Authentication required');
+    }
+    return toGuestView(order);
   }
 
   /** Inserts the Order, retrying with a new reference on a `P2002`. */
@@ -103,19 +143,13 @@ export class OrdersService {
   }
 }
 
-/**
- * Maps a stored Order to the Guest view (no internal id). Lines come from the
- * in-memory `items` (first-appearance order), not the unordered stored rows.
- */
-function toGuestView(
-  order: StoredOrder,
-  items: NewOrderItem[],
-): GuestOrderView {
+/** Maps a stored Order (items in basket order) to the Guest view (no internal id). */
+function toGuestView(order: StoredOrder): GuestOrderView {
   return {
     reference: order.reference,
     guestName: order.guestName,
     status: order.status,
-    items: items.map(({ name, quantity, unitPriceCents }) => ({
+    items: order.items.map(({ name, quantity, unitPriceCents }) => ({
       name,
       quantity,
       unitPriceCents,

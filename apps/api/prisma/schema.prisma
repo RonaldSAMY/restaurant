@@ -38,7 +38,9 @@ model Order {
   items      OrderItem[]
 }
 
-/// One Order line. `name` and `unitPriceCents` are snapshots of the Menu Item.
+/// One Order line. `name` and `unitPriceCents` are snapshots of the Menu Item;
+/// `position` is the 0-based basket order; not unique, because the insert
+/// retry reads any P2002 as a reference collision.
 model OrderItem {
   id             String   @id @default(uuid()) @db.Uuid
   orderId        String   @db.Uuid
@@ -48,6 +50,7 @@ model OrderItem {
   name           String
   quantity       Int
   unitPriceCents Int
+  position       Int
 
   @@index([orderId])
   @@index([menuItemId])
