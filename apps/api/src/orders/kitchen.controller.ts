@@ -20,21 +20,21 @@ import { OrdersService } from './orders.service';
 class AdvanceStatusDto extends createZodDto(AdvanceStatusRequestSchema) {}
 
 /** Staff-only Kitchen Board endpoints. */
-@Controller(ApiRoutes.kitchenOrders)
+@Controller()
 @UseGuards(StaffAuthGuard)
 export class KitchenController {
   /** Receives the Orders service. */
   constructor(private readonly orders: OrdersService) {}
 
   /** Returns every non-Collected Order, oldest first. */
-  @Get()
+  @Get(ApiRoutes.kitchenOrders)
   @Header('Cache-Control', 'no-store')
   list(): Promise<KitchenOrder[]> {
     return this.orders.listOpen();
   }
 
   /** Moves the Order one step forward; `409 INVALID_TRANSITION` otherwise. */
-  @Patch(':id/status')
+  @Patch(ApiRoutes.kitchenOrderStatus)
   advance(
     @Param('id') id: string,
     @Body() { to }: AdvanceStatusDto,

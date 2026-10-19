@@ -16,6 +16,7 @@ import {
   LoginRequestSchema,
   type StaffMe,
 } from '@restaurant/shared';
+import { posix } from 'node:path';
 import type { CookieOptions, Request, Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 import { readCookie } from '../common/cookies';
@@ -42,8 +43,11 @@ const BASE: CookieOptions = {
 /** Access cookie attributes: sent to every route. */
 const ACCESS_OPTS: CookieOptions = { ...BASE, path: '/' };
 
-/** Refresh cookie attributes: sent only to the auth routes. */
-const REFRESH_OPTS: CookieOptions = { ...BASE, path: apiPath(ApiRoutes.auth) };
+/** Refresh cookie attributes: sent only to the auth routes (parent of refresh). */
+const REFRESH_OPTS: CookieOptions = {
+  ...BASE,
+  path: posix.dirname(apiPath(ApiRoutes.authRefresh)),
+};
 
 /** Sets both auth cookies. Expiry lives in the JWTs, not the cookies. */
 function setCookies(res: Response, { access, refresh }: TokenPair): void {
@@ -60,14 +64,14 @@ function staff({ principal }: PrincipalRequest) {
 }
 
 /** Staff login, token refresh, logout and identity. */
-@Controller(ApiRoutes.auth)
+@Controller()
 export class AuthController {
   /** Receives the session service. */
   constructor(private readonly sessions: AuthSessionService) {}
 
   /** Logs in with email and password; 5 attempts per 60 s per client IP. */
   @Public()
-  @Post('login')
+  @Post(ApiRoutes.authLogin)
   @HttpCode(200)
   @UseGuards(ThrottlerGuard)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -82,7 +86,7 @@ export class AuthController {
 
   /** Rotates the refresh cookie into a new pair; `401` on any failure. */
   @Public()
-  @Post('refresh')
+  @Post(ApiRoutes.authRefresh)
   @HttpCode(204)
   async refresh(
     @Req() req: Request,
@@ -97,7 +101,7 @@ export class AuthController {
   }
 
   /** Ends the caller's session and clears both cookies. */
-  @Post('logout')
+  @Post(ApiRoutes.authLogout)
   @HttpCode(204)
   @UseGuards(StaffAuthGuard)
   async logout(
@@ -113,7 +117,7 @@ export class AuthController {
   }
 
   /** Returns the logged-in staff user. */
-  @Get('me')
+  @Get(ApiRoutes.authMe)
   @Header('Cache-Control', 'no-store')
   @UseGuards(StaffAuthGuard)
   me(@Req() req: PrincipalRequest): Promise<StaffMe> {

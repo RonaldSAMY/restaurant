@@ -42,7 +42,7 @@ export const REFERENCE_LOOKUP_THROTTLE = {
  * Guest Order endpoints. No guest route takes an Order id; only the public,
  * throttled lookup takes a reference.
  */
-@Controller(ApiRoutes.orders)
+@Controller()
 export class OrdersController {
   /** Receives the Orders service. */
   constructor(private readonly orders: OrdersService) {}
@@ -52,7 +52,7 @@ export class OrdersController {
    * the Guest view. `409 ORDER_ALREADY_OPEN` while the caller's session is open.
    */
   @Public()
-  @Post()
+  @Post(ApiRoutes.orders)
   @HttpCode(201)
   async place(
     @Body() body: PlaceOrderDto,
@@ -74,7 +74,7 @@ export class OrdersController {
   }
 
   /** Returns the Guest view of the caller's open-session Order. */
-  @Get('current')
+  @Get(ApiRoutes.ordersCurrent)
   @Header('Cache-Control', 'no-store')
   @UseGuards(GuestSessionGuard)
   current(@Req() { principal }: PrincipalRequest): Promise<GuestOrderView> {
@@ -89,7 +89,7 @@ export class OrdersController {
    * within 24 h of placement. Unknown and expired references get the same 404.
    */
   @Public()
-  @Get('by-reference/:reference')
+  @Get(ApiRoutes.ordersByReference)
   @Header('Cache-Control', 'no-store')
   @UseGuards(ThrottlerGuard)
   @Throttle(REFERENCE_LOOKUP_THROTTLE)

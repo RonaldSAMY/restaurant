@@ -4,14 +4,14 @@ import { Public } from '../common/public.decorator';
 import { MenuService } from './menu.service';
 
 /** Public read endpoint for the Menu. */
-@Controller(ApiRoutes.menu)
+@Controller()
 export class MenuController {
   /** Receives the Menu service. */
   constructor(private readonly menu: MenuService) {}
 
   /** Returns the whole Menu grouped by category (`MenuResponse`). */
   @Public()
-  @Get()
+  @Get(ApiRoutes.menu)
   getMenu(): Promise<MenuResponse> {
     return this.menu.getMenu();
   }

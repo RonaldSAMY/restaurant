@@ -75,7 +75,7 @@ export function placeOrder(
 
 /** `GET /api/v1/orders/current`: the Guest Session's Order, or 401. */
 export function getCurrentOrder(): Promise<ApiResult<GuestOrderView>> {
-  return request(`${apiPath(ApiRoutes.orders)}/current`, GuestOrderViewSchema);
+  return request(apiPath(ApiRoutes.ordersCurrent), GuestOrderViewSchema);
 }
 
 /** `GET /api/v1/orders/by-reference/:reference`: any case, within 24 h. */
@@ -83,7 +83,7 @@ export function getOrderByReference(
   reference: string,
 ): Promise<ApiResult<GuestOrderView>> {
   return request(
-    `${apiPath(ApiRoutes.orders)}/by-reference/${encodeURIComponent(reference)}`,
+    apiPath(ApiRoutes.ordersByReference, { reference }),
     GuestOrderViewSchema,
   );
 }
@@ -99,7 +99,7 @@ let refreshing: Promise<ApiResult<undefined>> | null = null;
  * {@link staffRequest} and the staff socket (`lib/socket.ts`).
  */
 export function refreshSession(): Promise<ApiResult<undefined>> {
-  refreshing ??= request(`${apiPath(ApiRoutes.auth)}/refresh`, z.undefined(), {
+  refreshing ??= request(apiPath(ApiRoutes.authRefresh), z.undefined(), {
     method: 'POST',
   }).finally(() => {
     refreshing = null;
@@ -134,7 +134,7 @@ async function staffRequest<T>(
 
 /** `POST /api/v1/auth/login`: sets the staff cookies on success. */
 export function login(body: LoginRequest): Promise<ApiResult<StaffMe>> {
-  return request(`${apiPath(ApiRoutes.auth)}/login`, StaffMeSchema, {
+  return request(apiPath(ApiRoutes.authLogin), StaffMeSchema, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -143,7 +143,7 @@ export function login(body: LoginRequest): Promise<ApiResult<StaffMe>> {
 
 /** `POST /api/v1/auth/logout`: revokes the session and clears the cookies. */
 export function logout(): Promise<ApiResult<undefined>> {
-  return staffRequest(`${apiPath(ApiRoutes.auth)}/logout`, z.undefined(), {
+  return staffRequest(apiPath(ApiRoutes.authLogout), z.undefined(), {
     method: 'POST',
   });
 }
@@ -162,7 +162,7 @@ export function advanceOrder(
   to: OrderStatus,
 ): Promise<ApiResult<KitchenOrder>> {
   return staffRequest(
-    `${apiPath(ApiRoutes.kitchenOrders)}/${encodeURIComponent(id)}/status`,
+    apiPath(ApiRoutes.kitchenOrderStatus, { id }),
     KitchenOrderSchema,
     {
       method: 'PATCH',
