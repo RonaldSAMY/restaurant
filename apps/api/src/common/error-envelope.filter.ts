@@ -30,7 +30,7 @@ const HTTP_CODES: Partial<Record<number, ErrorCode>> = {
  * Stack to log for an unexpected error. Prisma errors put the call arguments
  * (possibly secrets) in their message, so they log only name, code and frames.
  */
-function loggableStack(error: Error): string | undefined {
+export function loggableStack(error: Error): string | undefined {
   if (!error.name.startsWith('PrismaClient')) return error.stack;
   const { code } = error as { code?: unknown };
   const frames = (error.stack ?? '')
@@ -41,6 +41,55 @@ function loggableStack(error: Error): string | undefined {
     .join('\n');
 }
 
+/** Logger for unexpected (500) errors. */
+const logger = new Logger('ErrorEnvelopeFilter');
+
+/**
+ * Maps an exception to its HTTP status and envelope body; logs unexpected
+ * errors (stack only). Shared by the HTTP filter and the Socket.IO ack filter.
+ */
+export function toEnvelope(exception: unknown): [number, ErrorEnvelope] {
+  if (exception instanceof DomainError) {
+    const { code, message, details } = exception;
+    return [ERROR_STATUS[code] ?? 500, { error: { code, message, details } }];
+  }
+  if (exception instanceof ZodValidationException) {
+    const zodError = exception.getZodError();
+    const details: ValidationIssue[] | undefined =
+      zodError instanceof ZodError
+        ? zodError.issues.map((i) => ({
+            path: i.path.length ? i.path.map(String).join('.') : '(root)',
+            message: i.message,
+          }))
+        : undefined;
+    return [
+      400,
+      {
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Validation failed',
+          details,
+        },
+      },
+    ];
+  }
+  const status =
+    exception instanceof HttpException ? exception.getStatus() : 500;
+  if (exception instanceof HttpException && status < 500) {
+    const code = HTTP_CODES[status] ?? 'INTERNAL';
+    return [status, { error: { code, message: exception.message } }];
+  }
+  logger.error(
+    exception instanceof Error
+      ? loggableStack(exception)
+      : `Non-Error thrown: ${typeof exception}`,
+  );
+  return [
+    status,
+    { error: { code: 'INTERNAL', message: 'Internal server error' } },
+  ];
+}
+
 /**
  * Global exception filter: turns every error into the AD-13 envelope
  * `{ error: { code, message, details? } }`. Unexpected errors become a generic
@@ -49,66 +98,20 @@ function loggableStack(error: Error): string | undefined {
  */
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
-  /** Logger for unexpected (500) errors. */
-  private readonly logger = new Logger(ErrorEnvelopeFilter.name);
-
   /**
    * Writes the envelope for `exception` to the HTTP response, or only ends the
    * response when the handler already sent its headers. On a non-HTTP host it
    * only logs unexpected errors.
    */
   catch(exception: unknown, host: ArgumentsHost): void {
-    const [status, body] = this.toEnvelope(exception);
+    const [status, body] = toEnvelope(exception);
     if (host.getType() !== 'http') return;
     const res = host.switchToHttp().getResponse<Response>();
     if (res.headersSent) {
-      this.logger.error(`Error after headers were sent (${body.error.code})`);
+      logger.error(`Error after headers were sent (${body.error.code})`);
       res.end();
       return;
     }
     res.status(status).json(body);
-  }
-
-  /** Maps an exception to its HTTP status and envelope body. */
-  private toEnvelope(exception: unknown): [number, ErrorEnvelope] {
-    if (exception instanceof DomainError) {
-      const { code, message, details } = exception;
-      return [ERROR_STATUS[code] ?? 500, { error: { code, message, details } }];
-    }
-    if (exception instanceof ZodValidationException) {
-      const zodError = exception.getZodError();
-      const details: ValidationIssue[] | undefined =
-        zodError instanceof ZodError
-          ? zodError.issues.map((i) => ({
-              path: i.path.length ? i.path.map(String).join('.') : '(root)',
-              message: i.message,
-            }))
-          : undefined;
-      return [
-        400,
-        {
-          error: {
-            code: 'VALIDATION_FAILED',
-            message: 'Validation failed',
-            details,
-          },
-        },
-      ];
-    }
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : 500;
-    if (exception instanceof HttpException && status < 500) {
-      const code = HTTP_CODES[status] ?? 'INTERNAL';
-      return [status, { error: { code, message: exception.message } }];
-    }
-    this.logger.error(
-      exception instanceof Error
-        ? loggableStack(exception)
-        : `Non-Error thrown: ${typeof exception}`,
-    );
-    return [
-      status,
-      { error: { code: 'INTERNAL', message: 'Internal server error' } },
-    ];
   }
 }

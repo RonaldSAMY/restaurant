@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import type { Socket } from 'socket.io';
 import { DomainError } from './domain-error';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
@@ -13,7 +14,7 @@ export type Principal =
   | { kind: 'staff'; staffId: string; sid: string }
   | { kind: 'guest'; sid: string; orderId: string };
 
-/** Request after a {@link PrincipalGuard} has admitted it. */
+/** Request (HTTP) or socket `data` (ws) after a {@link PrincipalGuard} has admitted it. */
 export type PrincipalRequest = {
   /** Set by {@link PrincipalGuard.canActivate}; absent on `@Public()` routes. */
   principal?: Principal;
@@ -23,7 +24,8 @@ export type PrincipalRequest = {
  * Base class for guards that establish a principal (staff or guest).
  * Subclasses implement {@link PrincipalGuard.authenticate} only: `canActivate`
  * is final, and {@link DefaultDenyGuard} denies any subclass that overrides it,
- * so an admitted request always carries `req.principal`.
+ * so an admitted request always carries `req.principal` (on ws:
+ * `client.data.principal`).
  */
 export abstract class PrincipalGuard implements CanActivate {
   /** Pins `canActivate` on the instance, so a class-field override throws at construction. */
@@ -41,13 +43,22 @@ export abstract class PrincipalGuard implements CanActivate {
     context: ExecutionContext,
   ): Principal | null | Promise<Principal | null>;
 
-  /** Sets `req.principal`, or throws `401 UNAUTHENTICATED` when there is none. Final. */
+  /**
+   * Sets `req.principal` (ws: `client.data.principal`), or throws
+   * `401 UNAUTHENTICATED` when there is none. Final.
+   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const principal = await this.authenticate(context);
     if (!principal) {
       throw new DomainError('UNAUTHENTICATED', 'Authentication required');
     }
-    context.switchToHttp().getRequest<PrincipalRequest>().principal = principal;
+    const target: PrincipalRequest =
+      context.getType() === 'ws'
+        ? context
+            .switchToWs()
+            .getClient<Socket<never, never, never, PrincipalRequest>>().data
+        : context.switchToHttp().getRequest<PrincipalRequest>();
+    target.principal = principal;
     return true;
   }
 }

@@ -1,10 +1,18 @@
 'use client';
 
-import type { KitchenOrder, OrderStatus } from '@restaurant/shared';
+import {
+  type KitchenOrder,
+  KitchenOrderSchema,
+  type KitchenStatusChanged,
+  KitchenStatusChangedSchema,
+  type OrderStatus,
+  SocketEvents,
+} from '@restaurant/shared';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { advanceOrder, listKitchenOrders, logout } from '../../lib/api';
-import { STATUS_LABELS } from '../track/order-view';
+import { openSocket } from '../../lib/socket';
+import { ranksLater, STATUS_LABELS } from '../track/order-view';
 
 /** The board's columns, left to right. */
 const COLUMNS = ['RECEIVED', 'PREPARING', 'READY'] as const;
@@ -43,6 +51,38 @@ export function applyAdvanced(
 ): KitchenOrder[] {
   return orders.flatMap((o) =>
     o.id !== updated.id ? [o] : updated.status === 'COLLECTED' ? [] : [updated],
+  );
+}
+
+/** The board after `order.created`: an unknown Order inserted by `placedAt` (then id). */
+export function applyCreated(
+  orders: readonly KitchenOrder[],
+  created: KitchenOrder,
+): KitchenOrder[] {
+  if (orders.some((o) => o.id === created.id)) return [...orders];
+  const after = orders.findIndex(
+    (o) =>
+      o.placedAt > created.placedAt ||
+      (o.placedAt === created.placedAt && o.id > created.id),
+  );
+  const at = after === -1 ? orders.length : after;
+  return [...orders.slice(0, at), created, ...orders.slice(at)];
+}
+
+/**
+ * The board after `order.status-changed`: the known card moved when the
+ * status ranks later, removed on COLLECTED; unknown ids are ignored.
+ */
+export function applyStatusChanged(
+  orders: readonly KitchenOrder[],
+  event: KitchenStatusChanged,
+): KitchenOrder[] {
+  return orders.flatMap((o) =>
+    o.id !== event.id || !ranksLater(event.status, o.status)
+      ? [o]
+      : event.status === 'COLLECTED'
+        ? []
+        : [{ ...o, status: event.status }],
   );
 }
 
@@ -124,7 +164,11 @@ export function Board({
   );
 }
 
-/** Loads the open Orders and lets staff advance them and log out. */
+/**
+ * Loads the open Orders and lets staff advance them and log out. A staff
+ * socket keeps the board live: every (re)connect reloads it, events add and
+ * move cards.
+ */
 export function KitchenBoard() {
   const router = useRouter();
   const [orders, setOrders] = useState<KitchenOrder[] | null>(null);
@@ -134,14 +178,35 @@ export function KitchenBoard() {
 
   useEffect(() => {
     let cancelled = false;
-    void listKitchenOrders().then((result) => {
-      if (cancelled) return;
-      if (result.ok) setOrders(result.data);
-      // UNAUTHENTICATED: staffRequest is already navigating to the login page.
-      else if (result.error.code !== 'UNAUTHENTICATED') setLoadFailed(true);
+    // ponytail: an event landing while a reload is in flight is overwritten by
+    // the older snapshot; merge the snapshot by rank if that ever shows.
+    const load = () =>
+      void listKitchenOrders().then((result) => {
+        if (cancelled) return;
+        if (result.ok) setOrders(result.data);
+        // UNAUTHENTICATED: staffRequest is already navigating to the login page.
+        else if (result.error.code !== 'UNAUTHENTICATED') setLoadFailed(true);
+      });
+    load();
+    const close = openSocket({
+      staff: true,
+      onConnect: load,
+      on: {
+        [SocketEvents.orderCreated]: (payload) => {
+          const created = KitchenOrderSchema.safeParse(payload);
+          if (created.success)
+            setOrders((list) => list && applyCreated(list, created.data));
+        },
+        [SocketEvents.orderStatusChanged]: (payload) => {
+          const event = KitchenStatusChangedSchema.safeParse(payload);
+          if (event.success)
+            setOrders((list) => list && applyStatusChanged(list, event.data));
+        },
+      },
     });
     return () => {
       cancelled = true;
+      close();
     };
   }, []);
 

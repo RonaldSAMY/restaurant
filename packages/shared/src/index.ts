@@ -4,3 +4,4 @@ export * from './menu';
 export * from './orders';
 export * from './auth';
 export * from './api-routes';
+export * from './realtime';

@@ -1,6 +1,5 @@
 import { type ExecutionContext, Injectable } from '@nestjs/common';
-import type { Request } from 'express';
-import { readCookie } from '../common/cookies';
+import { readContextCookie } from '../common/cookies';
 import { type Principal, PrincipalGuard } from '../common/default-deny.guard';
 import { AuthSessionService } from './auth-session.service';
 
@@ -23,9 +22,8 @@ export class StaffAuthGuard extends PrincipalGuard {
 
   /** Resolves the `access_token` cookie, or `null`. */
   async authenticate(context: ExecutionContext): Promise<Principal | null> {
-    const req = context.switchToHttp().getRequest<Request>();
     const claims = await this.sessions.resolve(
-      readCookie(req.headers.cookie, ACCESS_COOKIE),
+      readContextCookie(context, ACCESS_COOKIE),
     );
     return claims && { kind: 'staff', ...claims };
   }

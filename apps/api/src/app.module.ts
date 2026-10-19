@@ -7,6 +7,7 @@ import { ErrorEnvelopeFilter } from './common/error-envelope.filter';
 import { HealthController } from './health/health.controller';
 import { MenuModule } from './menu/menu.module';
 import { OrdersModule } from './orders/orders.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 /**
  * Root module of the api. Registers the global conventions once, so tests
@@ -14,7 +15,7 @@ import { OrdersModule } from './orders/orders.module';
  * guard and Zod body validation.
  */
 @Module({
-  imports: [AuthModule, MenuModule, OrdersModule],
+  imports: [AuthModule, MenuModule, OrdersModule, RealtimeModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, useClass: ErrorEnvelopeFilter },

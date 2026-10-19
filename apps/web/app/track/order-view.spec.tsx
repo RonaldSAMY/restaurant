@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { describeLookupError, OrderView } from './order-view';
+import { describeLookupError, OrderView, ranksLater } from './order-view';
+import { applyGuestEvent } from './tracked-order';
 import TrackPage from './page';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({}) }));
@@ -53,5 +54,36 @@ describe('TrackPage', () => {
     const html = renderToStaticMarkup(<TrackPage />);
     expect(html).toContain('Loading your Order');
     expect(html).toContain('Track an Order by reference');
+  });
+});
+
+describe('ranksLater', () => {
+  it('follows the lifecycle order', () => {
+    expect(ranksLater('PREPARING', 'RECEIVED')).toBe(true);
+    expect(ranksLater('COLLECTED', 'READY')).toBe(true);
+    expect(ranksLater('READY', 'READY')).toBe(false);
+    expect(ranksLater('PREPARING', 'READY')).toBe(false);
+  });
+});
+
+describe('applyGuestEvent', () => {
+  const held = { ...order, items: [...order.items] };
+  const event = (reference: string, status: typeof order.status | 'READY') => ({
+    reference,
+    status,
+    changedAt: '2026-10-19T12:30:00.000Z',
+  });
+
+  it('moves the Order to a later status', () => {
+    expect(applyGuestEvent(held, event('AB12CD', 'READY'))).toEqual({
+      ...held,
+      status: 'READY',
+    });
+  });
+
+  it('ignores a stale status and another reference', () => {
+    const ready = { ...held, status: 'READY' as const };
+    expect(applyGuestEvent(ready, event('AB12CD', 'PREPARING'))).toBe(ready);
+    expect(applyGuestEvent(held, event('ZZ99ZZ', 'READY'))).toBe(held);
   });
 });

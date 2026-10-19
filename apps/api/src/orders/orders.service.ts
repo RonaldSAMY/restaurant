@@ -14,6 +14,7 @@ import { GuestSessionPolicy } from './domain/guest-session-policy';
 import { OrderReference } from './domain/order-reference';
 import { OrderStatusMachine } from './domain/order-status-machine';
 import { GuestSessionService } from './guest-session.service';
+import { OrderEventsPublisher } from './ports/order-events-publisher';
 import {
   type NewOrderItem,
   OrderRepository,
@@ -42,12 +43,13 @@ export class OrdersService {
   /** Logs placements by reference only. */
   private readonly logger = new Logger(OrdersService.name);
 
-  /** Receives the Menu, the Order store, the Guest Sessions and the clock. */
+  /** Receives the Menu, the Order store, the Guest Sessions, the clock and the event publisher. */
   constructor(
     private readonly menu: MenuService,
     private readonly orders: OrderRepository,
     private readonly sessions: GuestSessionService,
     private readonly clock: Clock,
+    private readonly events: OrderEventsPublisher,
   ) {}
 
   /**
@@ -104,6 +106,7 @@ export class OrdersService {
 
     const order = await this.insert(req.guestName, items, totalCents);
     this.logger.log(`Order placed reference=${order.reference}`);
+    this.events.orderCreated(toKitchenView(order));
     // ponytail: insert and Redis SET are not atomic; a failed SET (500) leaves
     // an Order without a session, reachable by reference from Story 2.3.
     const newSid = await this.sessions.open(order);
@@ -130,15 +133,16 @@ export class OrdersService {
    *   and expired references.
    */
   async byReference(reference: string): Promise<GuestOrderView> {
-    const ref = OrderReference.normalize(reference);
-    const order = ref ? await this.orders.findByReference(ref) : null;
-    // The lookup window is the Guest Session's 24 h, minus the Collected rule.
-    const expired =
-      order && this.clock.now() >= GuestSessionPolicy.expiresAt(order.placedAt);
-    if (!order || expired) {
-      throw new DomainError('ORDER_NOT_FOUND', 'Order not found');
-    }
-    return toGuestView(order);
+    return toGuestView(await this.lookUp(reference));
+  }
+
+  /**
+   * Returns the id of the Order with `reference`, by the same rule as
+   * {@link byReference} (for `order.subscribe`; the id never leaves the api).
+   * @throws DomainError `ORDER_NOT_FOUND` as {@link byReference}.
+   */
+  async idByReference(reference: string): Promise<string> {
+    return (await this.lookUp(reference)).id;
   }
 
   /** Returns every non-Collected Order for the Kitchen Board, oldest first. */
@@ -161,12 +165,37 @@ export class OrdersService {
         to,
       });
     }
+    const changedAt = this.clock.now();
     const order = await this.orders.findById(id);
     if (!order) throw orderNotFound();
+    this.events.statusChanged({
+      id,
+      reference: order.reference,
+      status: to,
+      changedAt: changedAt.toISOString(),
+    });
     this.logger.log(
       `Order status reference=${order.reference} from=${from} to=${to}`,
     );
     return toKitchenView(order);
+  }
+
+  /**
+   * The reference lookup rule: any letter case, while
+   * `clock.now() < placedAt + 24 h`; Collected Orders stay visible.
+   * @throws DomainError `ORDER_NOT_FOUND`, identical for malformed, unknown
+   *   and expired references.
+   */
+  private async lookUp(reference: string): Promise<StoredOrder> {
+    const ref = OrderReference.normalize(reference);
+    const order = ref ? await this.orders.findByReference(ref) : null;
+    // The lookup window is the Guest Session's 24 h, minus the Collected rule.
+    const expired =
+      order && this.clock.now() >= GuestSessionPolicy.expiresAt(order.placedAt);
+    if (!order || expired) {
+      throw new DomainError('ORDER_NOT_FOUND', 'Order not found');
+    }
+    return order;
   }
 
   /** Inserts the Order, retrying with a new reference on a `P2002`. */

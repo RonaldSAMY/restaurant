@@ -1,4 +1,8 @@
-import type { GuestOrderView, OrderStatus } from '@restaurant/shared';
+import {
+  type GuestOrderView,
+  type OrderStatus,
+  OrderStatusSchema,
+} from '@restaurant/shared';
 import type { ApiError } from '../../lib/api';
 import { formatPrice } from '../../lib/menu';
 
@@ -9,6 +13,12 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   READY: 'Ready',
   COLLECTED: 'Collected',
 };
+
+/** Whether `next` comes later in the lifecycle than `held` (live events only move forward). */
+export function ranksLater(next: OrderStatus, held: OrderStatus): boolean {
+  const rank = OrderStatusSchema.options;
+  return rank.indexOf(next) > rank.indexOf(held);
+}
 
 /** Maps a failed Order load to its message, by `code` only. */
 export function describeLookupError(error: ApiError): string {

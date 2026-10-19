@@ -5,6 +5,7 @@ import { Clock } from '../common/clock';
 import { DomainError } from '../common/domain-error';
 import { parseEnv } from '../common/env';
 import { REDIS, type RedisClient } from '../common/redis.module';
+import { Rooms, SocketServerRef } from '../common/socket-server.ref';
 import {
   type AccessClaims,
   AuthTokens,
@@ -48,12 +49,13 @@ export class AuthSessionService implements OnModuleInit {
   /** Hash verified for unknown emails, so they cost the same as a wrong password. */
   private dummyHash = '';
 
-  /** Receives Redis, the staff store, the hasher and the clock. */
+  /** Receives Redis, the staff store, the hasher, the clock and the socket server. */
   constructor(
     @Inject(REDIS) private readonly redis: RedisClient,
     private readonly users: StaffUserRepository,
     private readonly hasher: PasswordHasher,
     private readonly clock: Clock,
+    private readonly sockets: SocketServerRef,
   ) {}
 
   /** Computes the dummy hash with the real hasher's parameters. */
@@ -115,7 +117,10 @@ export class AuthSessionService implements OnModuleInit {
     return this.issue(staffId, sid, jti);
   }
 
-  /** Ends session `sid` and, when `refreshToken` verifies for that session, its refresh key. */
+  /**
+   * Ends session `sid` and, when `refreshToken` verifies for that session, its
+   * refresh key; then disconnects the session's sockets.
+   */
   async logout(sid: string, refreshToken: string | undefined): Promise<void> {
     const claims = AuthTokens.verifyRefresh(
       refreshToken,
@@ -125,6 +130,7 @@ export class AuthSessionService implements OnModuleInit {
     const keys = [sessionKey(sid)];
     if (claims?.sid === sid) keys.push(refreshKey(claims.jti));
     await this.redis.del(keys);
+    this.sockets.server?.in(Rooms.staffSession(sid)).disconnectSockets();
   }
 
   /** Returns the claims of a valid access token whose session is live, or `null`. */

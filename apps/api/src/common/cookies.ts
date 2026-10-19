@@ -1,3 +1,7 @@
+import type { ArgumentsHost } from '@nestjs/common';
+import type { Request } from 'express';
+import type { Socket } from 'socket.io';
+
 /**
  * Returns the value of cookie `name` from a `Cookie` request header, or
  * `undefined` when the header or the cookie is absent. Minimal parser: values
@@ -14,4 +18,19 @@ export function readCookie(
     }
   }
   return undefined;
+}
+
+/**
+ * Returns cookie `name` from the caller's `Cookie` header: the HTTP request's,
+ * or the Socket.IO handshake's on a ws host.
+ */
+export function readContextCookie(
+  context: ArgumentsHost,
+  name: string,
+): string | undefined {
+  const header =
+    context.getType() === 'ws'
+      ? context.switchToWs().getClient<Socket>().handshake.headers.cookie
+      : context.switchToHttp().getRequest<Request>().headers.cookie;
+  return readCookie(header, name);
 }

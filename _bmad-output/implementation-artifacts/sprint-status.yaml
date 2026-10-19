@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-17-2026 17:24
-last_updated: 10-19-2026 20:39
+last_updated: 10-19-2026 21:09
 project: restuarent
 project_key: NOKEY
 tracking_system: file-system
@@ -55,7 +55,7 @@ development_status:
   3-1-staff-login-refresh-and-logout-api: done
   3-2-kitchen-orders-api-and-status-transitions: done
   3-3-staff-login-page-and-kitchen-board: done
-  3-4-live-updates-for-board-and-tracking-page: backlog
+  3-4-live-updates-for-board-and-tracking-page: review
   3-5-end-to-end-demo-tests: backlog
   3-6-endpoint-sub-paths-in-shared-api-routes: backlog
   epic-3-retrospective: optional

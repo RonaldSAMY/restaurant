@@ -3,6 +3,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { Clock, SystemClock } from '../common/clock';
 import { PrismaModule } from '../common/prisma.module';
 import { RedisModule } from '../common/redis.module';
+import { SocketServerRefModule } from '../common/socket-server.ref';
 import { Argon2PasswordHasher } from './adapters/argon2-password-hasher';
 import { PrismaStaffUserRepository } from './adapters/prisma-staff-user.repository';
 import { AuthController } from './auth.controller';
@@ -21,6 +22,7 @@ import { StaffAuthGuard } from './staff-auth.guard';
   imports: [
     PrismaModule,
     RedisModule,
+    SocketServerRefModule,
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
   ],
   controllers: [AuthController],

@@ -89,13 +89,16 @@ export function getOrderByReference(
 }
 
 /** Where a staff caller goes once its session cannot be refreshed. */
-const STAFF_LOGIN_PAGE = '/kitchen/login';
+export const STAFF_LOGIN_PAGE = '/kitchen/login';
 
 /** The in-flight `auth/refresh`, shared by every staff call in this tab. */
 let refreshing: Promise<ApiResult<undefined>> | null = null;
 
-/** Starts `POST auth/refresh`, or joins the one already in flight. */
-function refreshSession(): Promise<ApiResult<undefined>> {
+/**
+ * Starts `POST auth/refresh`, or joins the one already in flight. Shared by
+ * {@link staffRequest} and the staff socket (`lib/socket.ts`).
+ */
+export function refreshSession(): Promise<ApiResult<undefined>> {
   refreshing ??= request(`${apiPath(ApiRoutes.auth)}/refresh`, z.undefined(), {
     method: 'POST',
   }).finally(() => {

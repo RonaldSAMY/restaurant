@@ -1,7 +1,13 @@
 import type { KitchenOrder } from '@restaurant/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { applyAdvanced, Board, nextStatus } from './kitchen-board';
+import {
+  applyAdvanced,
+  applyCreated,
+  applyStatusChanged,
+  Board,
+  nextStatus,
+} from './kitchen-board';
 import { describeLoginError } from './login/login-form';
 import KitchenLoginPage from './login/page';
 
@@ -138,5 +144,59 @@ describe('KitchenLoginPage', () => {
     expect(html).toMatch(/type="email"/);
     expect(html).toMatch(/type="password"/);
     expect(html).toContain('Log in');
+  });
+});
+
+describe('applyCreated', () => {
+  const at = (o: KitchenOrder, placedAt: string) => ({ ...o, placedAt });
+  const a = at(order('1', 'AAAAA1', 'RECEIVED'), '2026-10-19T12:00:00.000Z');
+  const c = at(order('3', 'CCCCC3', 'READY'), '2026-10-19T12:10:00.000Z');
+
+  it('inserts an unknown Order in placedAt order', () => {
+    const b = at(order('2', 'BBBBB2', 'RECEIVED'), '2026-10-19T12:05:00.000Z');
+    expect(applyCreated([a, c], b)).toEqual([a, b, c]);
+  });
+
+  it('breaks placedAt ties by id and appends the newest', () => {
+    const b = at(order('2', 'BBBBB2', 'RECEIVED'), a.placedAt);
+    const d = at(order('4', 'DDDDD4', 'RECEIVED'), '2026-10-19T12:20:00.000Z');
+    expect(applyCreated([a, c], b)).toEqual([a, b, c]);
+    expect(applyCreated([a, c], d)).toEqual([a, c, d]);
+  });
+
+  it('ignores a known id', () => {
+    expect(applyCreated([a, c], { ...a, guestName: 'Other' })).toEqual([a, c]);
+  });
+});
+
+describe('applyStatusChanged', () => {
+  const a = order('1', 'AAAAA1', 'RECEIVED');
+  const b = order('2', 'BBBBB2', 'READY');
+  const event = (o: KitchenOrder, status: KitchenOrder['status']) => ({
+    id: o.id,
+    reference: o.reference,
+    status,
+    changedAt: '2026-10-19T12:30:00.000Z',
+  });
+
+  it('moves the known card forward', () => {
+    expect(applyStatusChanged([a, b], event(a, 'PREPARING'))).toEqual([
+      { ...a, status: 'PREPARING' },
+      b,
+    ]);
+  });
+
+  it('removes the card on COLLECTED', () => {
+    expect(applyStatusChanged([a, b], event(b, 'COLLECTED'))).toEqual([a]);
+  });
+
+  it('ignores stale events and unknown ids', () => {
+    expect(applyStatusChanged([a, b], event(b, 'PREPARING'))).toEqual([a, b]);
+    expect(applyStatusChanged([a, b], event(b, 'READY'))).toEqual([a, b]);
+    const unknown = order('9', 'ZZZZZ9', 'RECEIVED');
+    expect(applyStatusChanged([a, b], event(unknown, 'PREPARING'))).toEqual([
+      a,
+      b,
+    ]);
   });
 });
