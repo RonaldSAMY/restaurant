@@ -46,7 +46,7 @@ development_status:
   epic-2: in-progress
   2-1-place-order-api: done
   2-2-guest-session: done
-  2-3-track-by-order-reference-api: review
+  2-3-track-by-order-reference-api: done
   2-4-place-an-order-from-the-menu-page: backlog
   2-5-order-tracking-pages: backlog
   epic-2-retrospective: optional
