@@ -164,3 +164,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
   summary: Login submit (validate → login → router.replace) and logout navigation have no automated test.
   evidence: kitchen.spec.tsx mocks useRouter as `{}`; only static markup and describeLoginError are checked.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: Two kitchen tabs whose access expires together race `auth/refresh`; the loser's refresh token is already consumed (GETDEL) and that tab is sent to login.
+  evidence: single-flight `refreshing` in apps/web/lib/api.ts is per-tab; fix options are retry-once-after-rejected-refresh or `navigator.locks`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: Login that succeeds but whose cookies don't stick (e.g. Secure cookie over http) bounces silently back to an empty login form.
+  evidence: login-form.tsx shows no message when the board's first load redirects back; needs a "session could not be started" signal.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: A logged-in staff member can open /kitchen/login and log in again, leaving the first server session in Redis until TTL.
+  evidence: login page has no already-authenticated check (auth/me was out of scope in 3.3).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: The Kitchen Board imports `STATUS_LABELS` from the Guest route module `app/track/order-view.tsx`; move it to `lib/` or `@restaurant/shared`.
+  evidence: apps/web/app/kitchen/kitchen-board.tsx imports `../track/order-view`.

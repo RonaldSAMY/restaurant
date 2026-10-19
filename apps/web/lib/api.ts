@@ -106,8 +106,9 @@ function refreshSession(): Promise<ApiResult<undefined>> {
 
 /**
  * {@link request} for staff routes: on `401 UNAUTHENTICATED` it awaits one
- * shared refresh and retries once. A failed refresh or a second 401 sends
- * the tab to the login page and returns the error.
+ * shared refresh and retries once. A rejected refresh or a second 401 sends
+ * the tab to the login page and returns `UNAUTHENTICATED`; any other refresh
+ * failure (network, timeout) is returned without navigating.
  */
 async function staffRequest<T>(
   path: string,
@@ -118,7 +119,8 @@ async function staffRequest<T>(
   if (first.ok || first.error.code !== 'UNAUTHENTICATED') return first;
   const refreshed = await refreshSession();
   if (!refreshed.ok) {
-    window.location.assign(STAFF_LOGIN_PAGE);
+    if (refreshed.error.code === 'UNAUTHENTICATED')
+      window.location.assign(STAFF_LOGIN_PAGE);
     return { ok: false, error: refreshed.error };
   }
   const retry = await request(path, schema, init);

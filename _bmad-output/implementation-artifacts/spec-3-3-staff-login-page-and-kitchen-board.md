@@ -82,6 +82,8 @@ context:
 
 ## Spec Change Log
 
+- 2026-10-19 (post-review, user-approved fixes): `staffRequest` now redirects to `/kitchen/login` only when the refresh is rejected with `UNAUTHENTICATED` (or the retry 401s); network/timeout refresh failures are returned without navigating. This narrows the frozen "if the refresh fails" rule per the user's "apply the fixes" on the bmad-review report. Also: board suppresses notices on UNAUTHENTICATED in advance/refetch, keeps a card pending until a 409 refetch settles, hides Log out until Orders load, keeps the `role="status"` region rendered when empty; login form uses `noValidate` so `LoginRequestSchema` is the only validator.
+
 ## Review Triage Log
 
 | # | Finding (source) | Verdict | Evidence | Route |

@@ -48,7 +48,7 @@ export function LoginForm() {
   }
 
   return (
-    <form className="login" onSubmit={(event) => void submit(event)}>
+    <form className="login" noValidate onSubmit={(event) => void submit(event)}>
       <label htmlFor="staff-email">Email</label>
       <input
         id="staff-email"

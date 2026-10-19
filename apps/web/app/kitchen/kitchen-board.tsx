@@ -2,7 +2,7 @@
 
 import type { KitchenOrder, OrderStatus } from '@restaurant/shared';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { advanceOrder, listKitchenOrders, logout } from '../../lib/api';
 import { STATUS_LABELS } from '../track/order-view';
 
@@ -132,13 +132,6 @@ export function KitchenBoard() {
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState('');
 
-  /** Replaces the board with a fresh list; reports whether it loaded. */
-  const reload = useCallback(async () => {
-    const result = await listKitchenOrders();
-    if (result.ok) setOrders(result.data);
-    return result.ok;
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     void listKitchenOrders().then((result) => {
@@ -152,27 +145,36 @@ export function KitchenBoard() {
     };
   }, []);
 
-  /** Sends the advance and moves, removes or refreshes the card. */
+  /**
+   * Sends the advance and moves, removes or refreshes the card. The card stays
+   * pending until any refetch settles. UNAUTHENTICATED means staffRequest is
+   * already navigating to the login page, so no notice is shown.
+   */
   async function advance(order: KitchenOrder, to: OrderStatus) {
     setPending((ids) => new Set(ids).add(order.id));
     setNotice('');
     const result = await advanceOrder(order.id, to);
+    let message = '';
+    if (result.ok) {
+      const updated = result.data;
+      setOrders((list) => applyAdvanced(list ?? [], updated));
+    } else if (result.error.code === 'INVALID_TRANSITION') {
+      const reloaded = await listKitchenOrders();
+      if (reloaded.ok) {
+        setOrders(reloaded.data);
+        message = 'That Order already moved. Board refreshed.';
+      } else if (reloaded.error.code !== 'UNAUTHENTICATED') {
+        message = GENERIC_ERROR;
+      }
+    } else if (result.error.code !== 'UNAUTHENTICATED') {
+      message = GENERIC_ERROR;
+    }
     setPending((ids) => {
       const next = new Set(ids);
       next.delete(order.id);
       return next;
     });
-    if (result.ok) {
-      const updated = result.data;
-      setOrders((list) => applyAdvanced(list ?? [], updated));
-    } else if (result.error.code === 'INVALID_TRANSITION') {
-      const loaded = await reload();
-      setNotice(
-        loaded ? 'That Order already moved. Board refreshed.' : GENERIC_ERROR,
-      );
-    } else {
-      setNotice(GENERIC_ERROR);
-    }
+    setNotice(message);
   }
 
   /** Ends the session and returns to the login page whatever the result. */
@@ -185,9 +187,11 @@ export function KitchenBoard() {
     <>
       <header className="board-header">
         <h1>Kitchen Board</h1>
-        <button type="button" onClick={() => void signOut()}>
-          Log out
-        </button>
+        {orders !== null && (
+          <button type="button" onClick={() => void signOut()}>
+            Log out
+          </button>
+        )}
       </header>
       <p role="status" className="notice">
         {notice}

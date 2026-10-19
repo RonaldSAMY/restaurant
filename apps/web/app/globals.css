@@ -176,7 +176,7 @@ main.wide {
 }
 
 .notice:empty {
-  display: none;
+  margin: 0;
 }
 
 .board {

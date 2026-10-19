@@ -225,14 +225,17 @@ describe('staff calls', () => {
 
   it('shares one refresh between concurrent 401s', async () => {
     let refreshed = false;
-    let releaseRefresh = () => {};
+    // Every refresh fetch is held here, so a broken single-flight shows up as
+    // a count of 2 below instead of a hung promise.
+    const held: (() => void)[] = [];
+    const releaseRefresh = () => {
+      refreshed = true;
+      held.splice(0).forEach((release) => release());
+    };
     const fetchMock = vi.fn((path: string) => {
       if (path === '/api/v1/auth/refresh')
         return new Promise<Response>((resolve) => {
-          releaseRefresh = () => {
-            refreshed = true;
-            resolve(new Response(null, { status: 204 }));
-          };
+          held.push(() => resolve(new Response(null, { status: 204 })));
         });
       return Promise.resolve(
         refreshed ? Response.json([kitchenOrder]) : unauthenticated(),
@@ -240,13 +243,22 @@ describe('staff calls', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const both = Promise.all([listKitchenOrders(), listKitchenOrders()]);
-    // Let both first attempts 401 and join the refresh before it settles.
+    // Both first attempts must have 401'd and reached the refresh step.
     await vi.waitFor(() => {
-      expect(calledPaths(fetchMock)).toContain('/api/v1/auth/refresh');
+      const paths = calledPaths(fetchMock);
+      expect(paths.filter((p) => p === '/api/v1/kitchen/orders')).toHaveLength(
+        2,
+      );
+      expect(paths).toContain('/api/v1/auth/refresh');
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    releaseRefresh();
-    const results = await both;
+    let results;
+    try {
+      releaseRefresh();
+      results = await both;
+    } finally {
+      releaseRefresh();
+    }
     expect(results.every((r) => r.ok)).toBe(true);
     expect(
       calledPaths(fetchMock).filter((p) => p === '/api/v1/auth/refresh'),
@@ -261,6 +273,34 @@ describe('staff calls', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(assign).toHaveBeenCalledWith('/kitchen/login');
+  });
+
+  it('returns a non-auth refresh failure without leaving the page', async () => {
+    const internal = { code: 'INTERNAL', message: 'x' };
+    stubResponses(unauthenticated, () =>
+      Response.json({ error: internal }, { status: 500 }),
+    );
+    await expect(listKitchenOrders()).resolves.toEqual({
+      ok: false,
+      error: internal,
+    });
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('retries with the original method and body', async () => {
+    const fetchMock = stubResponses(
+      unauthenticated,
+      () => new Response(null, { status: 204 }),
+      () => Response.json(kitchenOrder),
+    );
+    await expect(advanceOrder('a', 'READY')).resolves.toEqual({
+      ok: true,
+      data: kitchenOrder,
+    });
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ to: 'READY' }),
+    });
   });
 
   it('goes to the login page when the retry is 401, without a second refresh', async () => {
@@ -282,21 +322,20 @@ describe('staff calls', () => {
     expect(assign).toHaveBeenCalledWith('/kitchen/login');
   });
 
-  it.each([409, 500])(
-    'returns a %i as-is without refreshing',
-    async (status) => {
-      const error = { code: 'INVALID_TRANSITION', message: 'x' };
-      const fetchMock = stubResponses(() =>
-        Response.json({ error }, { status }),
-      );
-      await expect(advanceOrder('a', 'PREPARING')).resolves.toEqual({
-        ok: false,
-        error,
-      });
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(assign).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    [409, 'INVALID_TRANSITION'],
+    [500, 'INTERNAL'],
+    [401, 'INVALID_CREDENTIALS'],
+  ])('returns a %i %s as-is without refreshing', async (status, code) => {
+    const error = { code, message: 'x' };
+    const fetchMock = stubResponses(() => Response.json({ error }, { status }));
+    await expect(advanceOrder('a', 'PREPARING')).resolves.toEqual({
+      ok: false,
+      error,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(assign).not.toHaveBeenCalled();
+  });
 
   it('advanceOrder PATCHes the encoded status path', async () => {
     const fetchMock = stubResponses(() => Response.json(kitchenOrder));
