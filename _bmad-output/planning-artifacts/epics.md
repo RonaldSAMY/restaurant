@@ -458,7 +458,7 @@ So that I know where my food is.
 
 ## Epic 3: Kitchen Staff run the board live
 
-Kitchen Staff log in, see all open Orders grouped Received / Preparing / Ready, advance them forward-only, and every board plus the Guest tracking page updates in under 2 s; logout revokes the session. Adds `StaffUser`. Completes the UJ-1 + UJ-2 demo.
+Kitchen Staff log in, see all open Orders grouped Received / Preparing / Ready, advance them forward-only, and every board plus the Guest tracking page updates in under 2 s; logout revokes the session. Adds `StaffUser`. Completes the UJ-1 + UJ-2 demo. Ends with Story 3.6, which moves every endpoint sub-path into shared `ApiRoutes`.
 
 ### Story 3.1: Staff login, refresh, and logout API
 
@@ -658,3 +658,32 @@ So that the demo is proven and stays proven.
 **Given** `.github/workflows/ci.yml`
 **When** code lands on `main` and nightly
 **Then** the Playwright e2e job runs against the compose stack.
+
+### Story 3.6: Endpoint sub-paths in shared `ApiRoutes`
+
+As the Builder,
+I want every endpoint path, sub-paths included, defined once in `packages/shared`,
+So that api and web cannot drift apart on a URL.
+
+**Implements:** AD-2, AD-19
+
+**Acceptance Criteria:**
+
+**Given** `packages/shared/src/api-routes.ts`
+**When** it builds
+**Then** `ApiRoutes` holds every endpoint as a full template relative to `API_PREFIX` (e.g. `orders/current`, `orders/by-reference/:reference`, `kitchen/orders/:id/status`, `auth/login`, `auth/refresh`, `auth/logout`, `auth/me`)
+**And** `apiPath(route, params)` replaces each `:name` with `encodeURIComponent(params.name)`, typed so a missing or extra param is a compile error.
+
+**Given** the Nest controllers
+**When** routes are declared
+**Then** every `@Controller`/`@Get`/`@Post`/`@Patch` path comes from `ApiRoutes`, with no path string literal left in `apps/api/src`
+**And** the `refresh_token` cookie `Path` is derived from `API_PREFIX` + `ApiRoutes`.
+
+**Given** `apps/web`
+**When** it calls the api
+**Then** every URL comes from `apiPath(...)`, with no hand-built sub-path or `encodeURIComponent` on a path segment left.
+
+**Given** the existing unit, integration and e2e tests
+**When** they run unchanged, with their literal `/api/v1/...` paths
+**Then** all pass, proving every public URL is the same as before
+**And** `api-routes.spec.ts` covers `apiPath` substitution, encoding (`ab 1/` → `ab%201%2F`) and the no-param case.

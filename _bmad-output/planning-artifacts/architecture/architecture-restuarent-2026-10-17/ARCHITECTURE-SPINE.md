@@ -69,7 +69,7 @@ Arrows are the only allowed import directions; no `forwardRef`. `packages/shared
 
 - **Binds:** FR-1–FR-9, all HTTP and WebSocket traffic
 - **Prevents:** web and api describing the same payload twice and drifting; DB shape leaking to the browser.
-- **Rule:** Every request body, response body, WebSocket event name/payload/ack, `OrderStatus`, and `ErrorCode` is defined once as a Zod schema in `packages/shared`; TS types are only `z.infer<>`. The api validates every inbound HTTP payload with the same schema (global `ZodValidationPipe`) and every inbound WS message with `schema.parse`; the web reuses them for forms and parses every response with them. `packages/shared` depends only on `zod` and holds **no** Prisma types, **no** business rules (transitions, pricing, expiry). The api prefix and endpoint paths live once in `packages/shared/src/api-routes.ts` (`API_PREFIX`, `ApiRoutes`, `apiPath`), matching AD-19 (amended 2026-10-19). Built by `tsc` to CommonJS + `.d.ts` in `dist/`; the dev stack runs `tsc -w` on it so edits reach both apps.
+- **Rule:** Every request body, response body, WebSocket event name/payload/ack, `OrderStatus`, and `ErrorCode` is defined once as a Zod schema in `packages/shared`; TS types are only `z.infer<>`. The api validates every inbound HTTP payload with the same schema (global `ZodValidationPipe`) and every inbound WS message with `schema.parse`; the web reuses them for forms and parses every response with them. `packages/shared` depends only on `zod` and holds **no** Prisma types, **no** business rules (transitions, pricing, expiry). The api prefix and every endpoint path, sub-paths and `:params` included, live once in `packages/shared/src/api-routes.ts` (`API_PREFIX`, `ApiRoutes` templates, `apiPath(route, params)`), matching AD-19 (amended 2026-10-19; full templates from Story 3.6). Built by `tsc` to CommonJS + `.d.ts` in `dist/`; the dev stack runs `tsc -w` on it so edits reach both apps.
 
 ### AD-3 — Module boundaries, import direction, data ownership
 
@@ -244,7 +244,7 @@ flowchart LR
 - **Binds:** FR-1–FR-9, apps/web, apps/api
 - **Prevents:** web and api inventing different paths, bodies, or Order shapes.
 - **Rule:** These are the MVP endpoints; schemas named here live in `packages/shared`. `GuestOrderView` = `{ reference, guestName, status, items[{ name, quantity, unitPriceCents }], totalCents, placedAt }`; `KitchenOrder` = `GuestOrderView` + `id`.
-- **Paths:** the `/api/v1` prefix and each resource path are defined once in `packages/shared/src/api-routes.ts`; the api and web read them from there. The compose api healthcheck URL and the tests keep literal `/api/v1` paths on purpose.
+- **Paths:** the `/api/v1` prefix and every endpoint path (full template, e.g. `orders/by-reference/:reference`) are defined once in `packages/shared/src/api-routes.ts`; the api and web read them from there, and `apiPath` encodes params. Until Story 3.6 lands, sub-paths are still typed in controller decorators and `apps/web/lib/api.ts`. The compose api healthcheck URL and the tests keep literal `/api/v1` paths on purpose.
 
 | Method + path | Guard | Request | Response |
 | --- | --- | --- | --- |

@@ -13,6 +13,7 @@ Kitchen Staff log in, see every open Order grouped Received / Preparing / Ready,
 - Story 3.3: Staff login page and Kitchen Board
 - Story 3.4: Live updates for board and tracking page
 - Story 3.5: End-to-end demo tests
+- Story 3.6: Endpoint sub-paths in shared ApiRoutes (last; sweeps 3.1–3.5)
 
 ## Requirements & Constraints
 
@@ -32,7 +33,7 @@ Kitchen Staff log in, see every open Order grouped Received / Preparing / Ready,
 - **Tokens:** `access_token` is a JWT (5 min) with `staffId` and `sid`, cookie `Path=/`. `refresh_token` is a JWT (1 h) with `sid` and `jti`, cookie `Path=/api/v1/auth`. Both cookies are `HttpOnly; Secure; SameSite=Strict`. Refresh consumes the `jti` with `GETDEL`, issues a new pair and returns `204`; an unknown `jti` → 401. `StaffAuthGuard` accepts only a valid access token whose `sid` is still in Redis. JWT expiry is checked against the `Clock` (`clockTimestamp`), never wall time. Logout deletes both keys, clears the cookies, returns `204` and disconnects `staff-session:{sid}` sockets through `SocketServerRef`.
 - **Principal:** the guard sets `{ kind: 'staff', staffId, sid }`. Guards extend `PrincipalGuard` by implementing `authenticate()`, and default deny applies.
 - **State machine:** `OrderStatusMachine` is pure domain and the only place that knows the order RECEIVED→PREPARING→READY→COLLECTED. It maps a requested `to` to its required predecessor. The api applies it as one conditional `UPDATE … WHERE id = :id AND status = :predecessor`, and 0 rows → 409. The web may hide buttons but never decides validity.
-- **Endpoints** (paths from `api-routes.ts`; shared schemas `LoginRequest`, `StaffMe`, `KitchenOrder` = `GuestOrderView` + `id`, `AdvanceStatusRequest { to }`):
+- **Endpoints** (resource paths from `api-routes.ts`; sub-paths move there in Story 3.6; shared schemas `LoginRequest`, `StaffMe`, `KitchenOrder` = `GuestOrderView` + `id`, `AdvanceStatusRequest { to }`):
   - `POST auth/login` (Public) → `200 StaffMe` + cookies
   - `POST auth/refresh` (refresh cookie) → `204`
   - `POST auth/logout` (Staff) → `204`
@@ -69,5 +70,6 @@ Kitchen Staff log in, see every open Order grouped Received / Preparing / Ready,
   - `GuestOrderView` is the base of `KitchenOrder`.
   - `OrdersService` placement must also publish `order.created`.
   - The `/track` and `/track/[reference]` pages gain the socket.
+- **Interim path rule (until Story 3.6).** Stories 3.3–3.5 take resource paths from `ApiRoutes` as today. Any sub-path is typed in exactly two places: the Nest decorator, and `apps/web/lib/api.ts` (web never builds an api URL anywhere else). Realtime keeps `/api/socket.io` where AD-10 puts it. Each story spec lists the sub-paths it adds, so Story 3.6 has a complete inventory. No story in between adds a new path helper or changes `apiPath`.
 - From Epic 1: default deny, `@Public()`, the error filter, `Clock`, the cookie helper, fixture builders (add `buildStaffUser`) and `SeedModule`.
 - One deferred item is still open for 3.1: log method + route on 500s, and narrow `DomainError.details` from `unknown`. Take it into scope or re-defer it explicitly.
