@@ -1,4 +1,9 @@
-import { MenuResponseSchema, type MenuResponse } from '@restaurant/shared';
+import {
+  ApiRoutes,
+  apiPath,
+  MenuResponseSchema,
+  type MenuResponse,
+} from '@restaurant/shared';
 import { parseEnv } from './env';
 
 /** EUR formatter for Menu prices (e.g. `€6.50`); built once per module. */
@@ -25,7 +30,7 @@ const FETCH_TIMEOUT_MS = 5000;
  * hitting the error boundary.
  */
 export async function fetchMenu(): Promise<MenuResponse | null> {
-  const url = `${parseEnv().API_INTERNAL_URL}/api/v1/menu`;
+  const url = `${parseEnv().API_INTERNAL_URL}${apiPath(ApiRoutes.menu)}`;
   try {
     const res = await fetch(url, {
       cache: 'no-store',

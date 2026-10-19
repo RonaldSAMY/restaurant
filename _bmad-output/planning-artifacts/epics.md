@@ -199,7 +199,7 @@ So that every endpoint is validated, secured, and shaped the same way.
 **Given** `packages/shared`
 **When** it builds (`tsc` → CJS + `.d.ts`; `tsc -w` in dev)
 **Then** it exports `OrderStatusSchema` (`RECEIVED | PREPARING | READY | COLLECTED`), `ErrorCodeSchema` (exactly the 10 AD-13 codes), and `ErrorEnvelopeSchema`
-**And** it depends only on `zod`, with no Prisma types, business rules, or route constants.
+**And** it depends only on `zod`, with no Prisma types or business rules; the api prefix and endpoint paths live in `api-routes.ts`.
 
 **Given** the api
 **When** any route throws a domain error, fails validation, or crashes

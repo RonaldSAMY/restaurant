@@ -32,4 +32,4 @@ jobs:
       - name: Prod api image contains the compiled entry points
         run: docker compose run --rm --no-deps --entrypoint sh api -c 'test -f dist/main.js && test -f dist/seed/seed.js'
       - name: Prod api image resolves its runtime dependencies
-        run: docker compose run --rm --no-deps --entrypoint node api -e "require('./dist/common/prisma.module'); require('./dist/common/redis.module')"
+        run: docker compose run --rm --no-deps --entrypoint node api -e "require('./dist/common/prisma.module'); require('./dist/common/redis.module'); require('./dist/configure-app');"
