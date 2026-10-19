@@ -1,0 +1,68 @@
+import {
+  ApiRoutes,
+  apiPath,
+  ErrorEnvelopeSchema,
+  GuestOrderViewSchema,
+  type ErrorEnvelope,
+  type GuestOrderView,
+  type PlaceOrderRequest,
+} from '@restaurant/shared';
+import type { z } from 'zod';
+
+/** How long to wait for the api before reporting a network error. */
+const FETCH_TIMEOUT_MS = 10_000;
+
+/** The `error` of an api error envelope. Branch on `code`, never `message`. */
+export type ApiError = ErrorEnvelope['error'];
+
+/** Outcome of an api call: parsed data, or the parsed (or synthesized) error. */
+export type ApiResult<T> =
+  { ok: true; data: T } | { ok: false; error: ApiError };
+
+/**
+ * The single browser fetch wrapper: calls a same-origin `/api/v1/...` path,
+ * parses success bodies with `schema` and failures with
+ * {@link ErrorEnvelopeSchema}. Network errors and bodies that match neither
+ * become an `INTERNAL` error, so callers only ever branch on `error.code`.
+ */
+async function request<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+): Promise<ApiResult<T>> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...init,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    console.error(`${path} failed: network error or timeout`);
+    return { ok: false, error: { code: 'INTERNAL', message: 'Network error' } };
+  }
+  const body: unknown = await res.json().catch(() => undefined);
+  if (res.ok) {
+    const parsed = schema.safeParse(body);
+    if (parsed.success) return { ok: true, data: parsed.data };
+  } else {
+    const parsed = ErrorEnvelopeSchema.safeParse(body);
+    if (parsed.success) return { ok: false, error: parsed.data.error };
+  }
+  console.error(`${path} failed: HTTP ${res.status} with an unexpected body`);
+  return {
+    ok: false,
+    error: { code: 'INTERNAL', message: 'Unexpected response' },
+  };
+}
+
+/** `POST /api/v1/orders`: places the Order; the api sets the session cookie. */
+export function placeOrder(
+  body: PlaceOrderRequest,
+): Promise<ApiResult<GuestOrderView>> {
+  return request(apiPath(ApiRoutes.orders), GuestOrderViewSchema, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}

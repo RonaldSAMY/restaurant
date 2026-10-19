@@ -144,3 +144,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-track-by-order-reference-api.md`
   summary: Move `ThrottlerModule.forRoot` out of `AuthModule` (e.g. a `common` throttle module imported by auth and orders) so the orders lookup throttle does not depend on AuthModule.
   evidence: `REFERENCE_LOOKUP_THROTTLE` overrides the `default` throttler registered only in `auth.module.ts`. Moving it to `AppModule` crashed `SeedModule`, which boots `AuthModule` alone (menu.int-spec SIGABRT).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-place-an-order-from-the-menu-page.md`
+  summary: Cover the basket submit flow end to end (success navigates to /track, inline errors, 409 link, double-submit guard) in Story 3.5's e2e tests.
+  evidence: The web unit tests run in node with no DOM lib, so `OrderMenu.submit()` and non-empty basket rendering are only covered by the pure-helper tests and a manual 375 px check.

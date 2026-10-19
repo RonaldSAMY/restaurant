@@ -7,6 +7,7 @@ vi.mock('../lib/menu', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/menu')>()),
   fetchMenu: vi.fn(),
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 /** Renders the page with `fetchMenu` resolving to the given value. */
 async function render(menu: Awaited<ReturnType<typeof fetchMenu>>) {
@@ -68,5 +69,27 @@ describe('HomePage', () => {
     ]) {
       expect(html).toContain(text);
     }
+  });
+
+  it('renders an empty basket with submit disabled', async () => {
+    const html = await render({
+      categories: [
+        {
+          name: 'Mains',
+          items: [
+            {
+              id: '00000000-0000-4000-8000-000000000002',
+              name: 'Burger',
+              description: 'Beef with cheddar',
+              priceCents: 1450,
+            },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain('aria-label="Add Burger"');
+    expect(html).toContain('Your basket is empty');
+    expect(html).toContain('€0.00');
+    expect(html).toMatch(/<button type="submit" disabled="">Place Order/);
   });
 });
