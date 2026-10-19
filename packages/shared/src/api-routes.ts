@@ -10,6 +10,7 @@ export const ApiRoutes = {
   menu: 'menu',
   orders: 'orders',
   auth: 'auth',
+  kitchenOrders: 'kitchen/orders',
 } as const;
 
 /** One of the {@link ApiRoutes} values. */

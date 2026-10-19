@@ -1,11 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { GuestOrderView, PlaceOrderRequest } from '@restaurant/shared';
+import type {
+  GuestOrderView,
+  KitchenOrder,
+  OrderStatus,
+  PlaceOrderRequest,
+} from '@restaurant/shared';
+import { z } from 'zod';
 import { Clock } from '../common/clock';
 import { DomainError } from '../common/domain-error';
 import { Prisma } from '../generated/prisma/client';
 import { MenuService } from '../menu/menu.service';
 import { GuestSessionPolicy } from './domain/guest-session-policy';
 import { OrderReference } from './domain/order-reference';
+import { OrderStatusMachine } from './domain/order-status-machine';
 import { GuestSessionService } from './guest-session.service';
 import {
   type NewOrderItem,
@@ -134,6 +141,34 @@ export class OrdersService {
     return toGuestView(order);
   }
 
+  /** Returns every non-Collected Order for the Kitchen Board, oldest first. */
+  async listOpen(): Promise<KitchenOrder[]> {
+    return (await this.orders.findOpen()).map(toKitchenView);
+  }
+
+  /**
+   * Moves the Order with `id` one step forward to `to`, as one conditional
+   * write (no read-then-write), so of two racing advances exactly one wins.
+   * @throws DomainError `ORDER_NOT_FOUND` for a malformed or unknown id,
+   *   `INVALID_TRANSITION` when the Order is not in `to`'s predecessor.
+   */
+  async advance(id: string, to: OrderStatus): Promise<KitchenOrder> {
+    if (!z.uuid().safeParse(id).success) throw orderNotFound();
+    const from = OrderStatusMachine.predecessorOf(to);
+    if (!from || !(await this.orders.transition(id, from, to))) {
+      if (!(await this.orders.findById(id))) throw orderNotFound();
+      throw new DomainError('INVALID_TRANSITION', 'Invalid status transition', {
+        to,
+      });
+    }
+    const order = await this.orders.findById(id);
+    if (!order) throw orderNotFound();
+    this.logger.log(
+      `Order status reference=${order.reference} from=${from} to=${to}`,
+    );
+    return toKitchenView(order);
+  }
+
   /** Inserts the Order, retrying with a new reference on a `P2002`. */
   private async insert(
     guestName: string,
@@ -175,4 +210,14 @@ function toGuestView(order: StoredOrder): GuestOrderView {
     totalCents: order.totalCents,
     placedAt: order.placedAt.toISOString(),
   };
+}
+
+/** Maps a stored Order to the Kitchen view: the Guest view plus `id`. */
+function toKitchenView(order: StoredOrder): KitchenOrder {
+  return { id: order.id, ...toGuestView(order) };
+}
+
+/** The 404 for a malformed or unknown Order id. */
+function orderNotFound(): DomainError {
+  return new DomainError('ORDER_NOT_FOUND', 'Order not found');
 }

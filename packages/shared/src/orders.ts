@@ -38,3 +38,15 @@ export const GuestOrderViewSchema = z.object({
 
 /** Guest-facing Order (see {@link GuestOrderViewSchema}). */
 export type GuestOrderView = z.infer<typeof GuestOrderViewSchema>;
+
+/** An Order as shown on the Kitchen Board: the Guest view plus its internal id. */
+export const KitchenOrderSchema = GuestOrderViewSchema.extend({ id: z.uuid() });
+
+/** Staff-facing Order (see {@link KitchenOrderSchema}). */
+export type KitchenOrder = z.infer<typeof KitchenOrderSchema>;
+
+/** Body of `PATCH /api/v1/kitchen/orders/:id/status`: the requested next status. */
+export const AdvanceStatusRequestSchema = z.object({ to: OrderStatusSchema });
+
+/** Parsed advance-status body (see {@link AdvanceStatusRequestSchema}). */
+export type AdvanceStatusRequest = z.infer<typeof AdvanceStatusRequestSchema>;

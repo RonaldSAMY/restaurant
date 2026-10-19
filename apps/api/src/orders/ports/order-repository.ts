@@ -47,4 +47,17 @@ export abstract class OrderRepository {
 
   /** Returns the Order with `reference` (exact match) and its items, or `null`. */
   abstract findByReference(reference: string): Promise<StoredOrder | null>;
+
+  /** Returns every non-`COLLECTED` Order with items, `placedAt` then `id` ascending. */
+  abstract findOpen(): Promise<StoredOrder[]>;
+
+  /**
+   * Sets the Order's status to `to` only if it is currently `from`, in one
+   * conditional write. Returns whether a row changed.
+   */
+  abstract transition(
+    id: string,
+    from: OrderStatus,
+    to: OrderStatus,
+  ): Promise<boolean>;
 }

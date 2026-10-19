@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { OrderStatus } from '@restaurant/shared';
 import { PrismaService } from '../../common/prisma.module';
 import {
   type NewOrder,
@@ -48,5 +49,27 @@ export class PrismaOrderRepository extends OrderRepository {
       where: { reference },
       include: ITEMS_IN_ORDER,
     });
+  }
+
+  /** Returns every non-`COLLECTED` Order, oldest first (`id` breaks ties). */
+  findOpen(): Promise<StoredOrder[]> {
+    return this.prisma.order.findMany({
+      where: { status: { not: 'COLLECTED' } },
+      orderBy: [{ placedAt: 'asc' }, { id: 'asc' }],
+      include: ITEMS_IN_ORDER,
+    });
+  }
+
+  /** `UPDATE … WHERE id = :id AND status = :from`; `true` when a row changed. */
+  async transition(
+    id: string,
+    from: OrderStatus,
+    to: OrderStatus,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.order.updateMany({
+      where: { id, status: from },
+      data: { status: to },
+    });
+    return count > 0;
   }
 }

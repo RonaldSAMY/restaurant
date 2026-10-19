@@ -48,6 +48,7 @@ flowchart LR
   realtime["RealtimeModule (gateway only)"] --> auth["AuthModule"]
   realtime --> orders["OrdersModule"]
   orders --> menu["MenuModule"]
+  orders --> auth
   auth --> common["common/ (SocketServerRef, Clock, Prisma, Redis, filter, env)"]
   orders --> common
   menu --> common
