@@ -9,3 +9,4 @@ dist/
 apps/api/src/generated/
 *.tsbuildinfo
 next-env.d.ts
+.playwright-mcp/
