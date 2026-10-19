@@ -24,7 +24,13 @@ services:
       - api-shared-modules:/repo/packages/shared/node_modules
     healthcheck:
       # Loads dist and checks a current export, so a stale dist from an older checkout fails.
-      test: ["CMD", "node", "-e", "require('/repo/packages/shared/dist').API_PREFIX || process.exit(1)"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('/repo/packages/shared/dist').API_PREFIX || process.exit(1)",
+        ]
       interval: 2s
       retries: 60
 

@@ -7,6 +7,7 @@ import { API_PREFIX } from '@restaurant/shared';
  */
 export function configureApp(app: INestApplication): void {
   // Nest mounts routes at `/` on an undefined prefix, so fail loudly on a stale shared build.
-  if (!API_PREFIX) throw new Error('API_PREFIX missing: rebuild @restaurant/shared');
+  if (!API_PREFIX)
+    throw new Error('API_PREFIX missing: rebuild @restaurant/shared');
   app.setGlobalPrefix(API_PREFIX);
 }
