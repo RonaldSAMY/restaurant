@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-17-2026 17:24
-last_updated: 10-19-2026 10:36
+last_updated: 10-19-2026 11:39
 project: restuarent
 project_key: NOKEY
 tracking_system: file-system
@@ -41,7 +41,7 @@ development_status:
   1-3-shared-contracts-and-api-conventions: done
   1-4-menu-api-with-cache-and-seed: done
   1-5-public-menu-page: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-place-order-api: backlog
@@ -58,3 +58,59 @@ development_status:
   3-4-live-updates-for-board-and-tracking-page: backlog
   3-5-end-to-end-demo-tests: backlog
   epic-3-retrospective: optional
+action_items:
+  - id: "epic-1-retro-item-1-commit-the-prettier-fix-to-configure-app"
+    epic: 1
+    action: "Commit the Prettier fix to configure-app.ts and compose.dev.yaml (F1)"
+    owner: "Ronald"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-2-add-a-pre-commit-hook-lint-staged-pretti"
+    epic: 1
+    action: "Add a pre-commit hook (lint-staged + Prettier + typecheck) so non-story
+      commits cannot skip gates"
+    owner: "Dev"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-3-fix-epic-1-context-md-32-to-match-amende"
+    epic: 1
+    action: "Fix epic-1-context.md:32 to match amended AD-2 (route constants live
+      in api-routes.ts)"
+    owner: "Architect"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-4-reword-spec-1-5-ac-and-page-spec-tsx-fix"
+    epic: 1
+    action: "Reword spec-1-5 AC and page.spec.tsx fixture to alphabetical category
+      order (A2 accepted)"
+    owner: "Dev"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-5-add-deferred-work-pull-in-acs-to-epic-2"
+    epic: 1
+    action: "Add deferred-work pull-in ACs to Epic 2/3 stories targeted by deferred
+      entries; give the compose-checks CI job an owning story"
+    owner: "PM"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-6-let-review-fix-the-spec-audit-trail-veri"
+    epic: 1
+    action: "Let review fix the spec audit trail (Verification, review_loop_iteration)
+      post-review instead of rejecting it every round"
+    owner: "Ronald"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-7-add-a-git-remote-and-confirm-a-green-ci"
+    epic: 1
+    action: "Add a git remote and confirm a green CI run before Epic 2 merges, or
+      record CI as local-only"
+    owner: "Ronald"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
+  - id: "epic-1-retro-item-8-when-epic-2-adds-non-seed-writes-add-che"
+    epic: 1
+    action: "When Epic 2 adds non-seed writes, add CHECK priceCents >= 0 on MenuItem
+      or validate before caching (R1)"
+    owner: "Dev"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-2026-10-19.md"
