@@ -134,3 +134,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-pre-epic-2-hardening.md`
   summary: Prisma redaction in `ErrorEnvelopeFilter` keys on `name.startsWith('PrismaClient')`; a service rethrowing a Prisma message in a plain `Error`, or a Prisma 7 `DriverAdapterError`, would still log call args or values.
   evidence: Unverified, medium if true. Settle like the PrismaClientValidationError probe: throw a driver-adapter error (e.g. a unique violation via `@prisma/adapter-pg`) through the filter and inspect the log.
+
+## Deferred from: review of spec-3-1-staff-login-refresh-and-logout-api (2026-10-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-staff-login-refresh-and-logout-api.md`
+  summary: The seed entry point (`apps/api/src/seed/seed.ts`: `parseEnv(SeedEnvSchema)` + `seedStaff` call) is never executed by tests or CI, so dropping or mis-wiring the staff upsert ships green with no staff login.
+  evidence: CI only checks `dist/seed/seed.js` exists; tests call `seedStaff`/`seedMenu` directly. Settle with a CI step that runs the compose `seed` service and asserts a `StaffUser` row.

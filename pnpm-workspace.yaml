@@ -9,3 +9,5 @@ allowBuilds:
   prisma: true
   # postinstall only re-checks the platform binding; the optional binary package covers it.
   "@swc/core": false
+  # install only runs node-gyp-build; the package ships N-API prebuilds (incl. musl) loaded at runtime.
+  argon2: false

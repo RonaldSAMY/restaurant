@@ -11,6 +11,7 @@ if (!process.env.TEST_DATABASE_URL || !process.env.TEST_REDIS_URL) {
 process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 process.env.REDIS_URL = process.env.TEST_REDIS_URL;
 process.env.PORT ??= '3000';
+process.env.AUTH_JWT_SECRET ??= 'test-secret-that-is-at-least-32-chars-long';
 
 /** Connection to the test database, shared by every test in the file. */
 const db = new Client({ connectionString: process.env.TEST_DATABASE_URL });

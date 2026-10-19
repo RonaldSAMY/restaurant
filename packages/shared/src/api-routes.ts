@@ -9,6 +9,7 @@ export const ApiRoutes = {
   health: 'health',
   menu: 'menu',
   orders: 'orders',
+  auth: 'auth',
 } as const;
 
 /** One of the {@link ApiRoutes} values. */

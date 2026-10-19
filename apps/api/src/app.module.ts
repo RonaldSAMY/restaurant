@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { ZodValidationPipe } from 'nestjs-zod';
+import { AuthModule } from './auth/auth.module';
 import { DefaultDenyGuard } from './common/default-deny.guard';
 import { ErrorEnvelopeFilter } from './common/error-envelope.filter';
 import { HealthController } from './health/health.controller';
@@ -13,7 +14,7 @@ import { OrdersModule } from './orders/orders.module';
  * guard and Zod body validation.
  */
 @Module({
-  imports: [MenuModule, OrdersModule],
+  imports: [AuthModule, MenuModule, OrdersModule],
   controllers: [HealthController],
   providers: [
     { provide: APP_FILTER, useClass: ErrorEnvelopeFilter },

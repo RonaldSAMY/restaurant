@@ -55,3 +55,11 @@ model OrderItem {
   @@index([orderId])
   @@index([menuItemId])
 }
+
+/// A seeded Kitchen Staff account. `email` is stored trimmed and lower-cased;
+/// `passwordHash` is an argon2id PHC string.
+model StaffUser {
+  id           String @id @default(uuid()) @db.Uuid
+  email        String @unique
+  passwordHash String
+}
