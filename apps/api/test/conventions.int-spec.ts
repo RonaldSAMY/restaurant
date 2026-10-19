@@ -10,12 +10,17 @@ import {
   Logger,
   Param,
   Post,
+  Req,
   Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { type ErrorCode, ErrorEnvelopeSchema } from '@restaurant/shared';
+import {
+  type ErrorCode,
+  ErrorEnvelopeSchema,
+  ValidationIssueSchema,
+} from '@restaurant/shared';
 import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 import request from 'supertest';
@@ -30,19 +35,48 @@ import {
 } from 'vitest';
 import { z } from 'zod';
 import { AppModule } from '../src/app.module';
-import { PrincipalGuard } from '../src/common/default-deny.guard';
+import {
+  type Principal,
+  PrincipalGuard,
+  type PrincipalRequest,
+} from '../src/common/default-deny.guard';
 import { DomainError, ERROR_STATUS } from '../src/common/domain-error';
+import { PrismaModule, PrismaService } from '../src/common/prisma.module';
 import { Public } from '../src/common/public.decorator';
 import { configureApp } from '../src/configure-app';
 
 /** Body DTO of the validation probe. */
 class NameDto extends createZodDto(z.object({ name: z.string() })) {}
 
-/** Test-only principal guard that always admits the request. */
+/** Principal set by {@link AllowAllGuard}. */
+const STAFF: Principal = { kind: 'staff', staffId: 's-1', sid: 'sid-1' };
+
+/** Test-only principal guard that always resolves {@link STAFF}. */
 class AllowAllGuard extends PrincipalGuard {
-  /** Always allows. */
-  canActivate(): boolean {
-    return true;
+  /** Always resolves the staff principal. */
+  authenticate(): Principal {
+    return STAFF;
+  }
+}
+
+/** Test-only principal guard that resolves no principal. */
+class NoPrincipalGuard extends PrincipalGuard {
+  /** Never resolves a principal. */
+  authenticate(): null {
+    return null;
+  }
+}
+
+/** Test-only principal guard that bypasses `authenticate` (forbidden). */
+class BypassGuard extends PrincipalGuard {
+  /** Never called. */
+  authenticate(): null {
+    return null;
+  }
+
+  /** Admits without setting a principal. */
+  override canActivate(): Promise<boolean> {
+    return Promise.resolve(true);
   }
 }
 
@@ -68,6 +102,43 @@ class ClassGuardedController {
 /** Test-only routes exercising each convention. */
 @Controller('probe')
 class ProbeController {
+  /**
+   * Injects Prisma for the Prisma error probe.
+   * @param prisma - app Prisma client.
+   */
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** Throws a real Prisma validation error whose call args hold a marker. */
+  @Public()
+  @Get('prisma-error')
+  async prismaError(): Promise<never> {
+    await this.prisma.menuItem.create({
+      data: { name: 'prisma-arg-marker' } as never,
+    });
+    throw new Error('Prisma accepted invalid data');
+  }
+
+  /** Echoes the principal set by the guard. */
+  @UseGuards(AllowAllGuard)
+  @Get('whoami')
+  whoami(@Req() req: PrincipalRequest): PrincipalRequest {
+    return { principal: req.principal };
+  }
+
+  /** Guarded by a principal guard that resolves no principal. */
+  @UseGuards(NoPrincipalGuard)
+  @Get('no-principal')
+  noPrincipal(): string {
+    throw new Error('handler must not run');
+  }
+
+  /** Guarded by a principal guard that overrides `canActivate`. */
+  @UseGuards(BypassGuard)
+  @Get('bypass')
+  bypass(): string {
+    throw new Error('handler must not run');
+  }
+
   /** Has neither `@Public()` nor a principal guard. */
   @Get('undecorated')
   undecorated(): string {
@@ -169,7 +240,7 @@ describe('api conventions', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
+      imports: [AppModule, PrismaModule],
       controllers: [ProbeController, ClassGuardedController],
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });
@@ -211,6 +282,9 @@ describe('api conventions', () => {
     expect(error.details).toEqual([
       { path: 'name', message: expect.any(String) as string },
     ]);
+    expect(() =>
+      ValidationIssueSchema.array().parse(error.details),
+    ).not.toThrow();
   });
 
   it('rejects malformed JSON with 400 VALIDATION_FAILED', async () => {
@@ -333,5 +407,35 @@ describe('api conventions', () => {
     expect(error.message).not.toBe('secret detail');
     expect(logged).toHaveBeenCalledOnce();
     expect(JSON.stringify(logged.mock.calls)).toContain('secret detail');
+  });
+
+  it('sets req.principal from the principal guard', async () => {
+    const res = await http().get('/api/v1/probe/whoami');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ principal: STAFF });
+  });
+
+  it('rejects a principal guard that resolves no principal with 401', async () => {
+    const res = await http().get('/api/v1/probe/no-principal');
+    expect(res.status).toBe(401);
+    expect(ErrorEnvelopeSchema.parse(res.body).error.code).toBe(
+      'UNAUTHENTICATED',
+    );
+  });
+
+  it('denies a principal guard that overrides canActivate with 403', async () => {
+    const res = await http().get('/api/v1/probe/bypass');
+    expect(res.status).toBe(403);
+    expect(ErrorEnvelopeSchema.parse(res.body).error.code).toBe('FORBIDDEN');
+  });
+
+  it('logs a Prisma error without its call arguments', async () => {
+    const logged = vi.spyOn(Logger.prototype, 'error');
+    const res = await http().get('/api/v1/probe/prisma-error');
+    expect(res.status).toBe(500);
+    expect(logged).toHaveBeenCalledOnce();
+    const output = JSON.stringify(logged.mock.calls);
+    expect(output).toContain('PrismaClientValidationError');
+    expect(output).not.toContain('prisma-arg-marker');
   });
 });

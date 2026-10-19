@@ -5,7 +5,11 @@ import {
   HttpException,
   Logger,
 } from '@nestjs/common';
-import type { ErrorCode, ErrorEnvelope } from '@restaurant/shared';
+import type {
+  ErrorCode,
+  ErrorEnvelope,
+  ValidationIssue,
+} from '@restaurant/shared';
 import type { Response } from 'express';
 import { ZodValidationException } from 'nestjs-zod';
 import { ZodError } from 'zod';
@@ -23,9 +27,25 @@ const HTTP_CODES: Partial<Record<number, ErrorCode>> = {
 };
 
 /**
+ * Stack to log for an unexpected error. Prisma errors put the call arguments
+ * (possibly secrets) in their message, so they log only name, code and frames.
+ */
+function loggableStack(error: Error): string | undefined {
+  if (!error.name.startsWith('PrismaClient')) return error.stack;
+  const { code } = error as { code?: unknown };
+  const frames = (error.stack ?? '')
+    .split('\n')
+    .filter((line) => line.startsWith('    at '));
+  return [typeof code === 'string' ? `${error.name} ${code}` : error.name]
+    .concat(frames)
+    .join('\n');
+}
+
+/**
  * Global exception filter: turns every error into the AD-13 envelope
  * `{ error: { code, message, details? } }`. Unexpected errors become a generic
  * 500 (5xx HTTP errors keep their status); only their stack is logged, never request headers, cookies or bodies.
+ * Non-HTTP hosts (the Socket.IO gateway) get no response from this filter.
  */
 @Catch()
 export class ErrorEnvelopeFilter implements ExceptionFilter {
@@ -34,10 +54,12 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
 
   /**
    * Writes the envelope for `exception` to the HTTP response, or only ends the
-   * response when the handler already sent its headers.
+   * response when the handler already sent its headers. On a non-HTTP host it
+   * only logs unexpected errors.
    */
   catch(exception: unknown, host: ArgumentsHost): void {
     const [status, body] = this.toEnvelope(exception);
+    if (host.getType() !== 'http') return;
     const res = host.switchToHttp().getResponse<Response>();
     if (res.headersSent) {
       this.logger.error(`Error after headers were sent (${body.error.code})`);
@@ -55,7 +77,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     }
     if (exception instanceof ZodValidationException) {
       const zodError = exception.getZodError();
-      const details =
+      const details: ValidationIssue[] | undefined =
         zodError instanceof ZodError
           ? zodError.issues.map((i) => ({
               path: i.path.length ? i.path.map(String).join('.') : '(root)',
@@ -81,7 +103,7 @@ export class ErrorEnvelopeFilter implements ExceptionFilter {
     }
     this.logger.error(
       exception instanceof Error
-        ? exception.stack
+        ? loggableStack(exception)
         : `Non-Error thrown: ${typeof exception}`,
     );
     return [

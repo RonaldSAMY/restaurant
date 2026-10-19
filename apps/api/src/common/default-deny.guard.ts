@@ -5,16 +5,60 @@ import {
 } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
+import { DomainError } from './domain-error';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
+/** Authenticated caller (AD-4); a future Customer is a third `kind`. */
+export type Principal =
+  | { kind: 'staff'; staffId: string; sid: string }
+  | { kind: 'guest'; sid: string; orderId: string };
+
+/** Request after a {@link PrincipalGuard} has admitted it. */
+export type PrincipalRequest = {
+  /** Set by {@link PrincipalGuard.canActivate}; absent on `@Public()` routes. */
+  principal?: Principal;
+};
+
 /**
- * Marker base class for guards that establish a principal (staff or guest).
- * A route carrying a subclass via `@UseGuards` passes the default-deny check;
- * the subclass then decides access itself.
+ * Base class for guards that establish a principal (staff or guest).
+ * Subclasses implement {@link PrincipalGuard.authenticate} only: `canActivate`
+ * is final, and {@link DefaultDenyGuard} denies any subclass that overrides it,
+ * so an admitted request always carries `req.principal`.
  */
 export abstract class PrincipalGuard implements CanActivate {
-  /** Returns whether the request carries a valid principal. */
-  abstract canActivate(context: ExecutionContext): boolean | Promise<boolean>;
+  /** Pins `canActivate` on the instance, so a class-field override throws at construction. */
+  constructor() {
+    Object.defineProperty(this, 'canActivate', {
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- unbound on purpose: DefaultDenyGuard compares identity; called as a method
+      value: PrincipalGuard.prototype.canActivate,
+      writable: false,
+      configurable: false,
+    });
+  }
+
+  /** Resolves the caller's principal, or `null` when there is none. */
+  abstract authenticate(
+    context: ExecutionContext,
+  ): Principal | null | Promise<Principal | null>;
+
+  /** Sets `req.principal`, or throws `401 UNAUTHENTICATED` when there is none. Final. */
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const principal = await this.authenticate(context);
+    if (!principal) {
+      throw new DomainError('UNAUTHENTICATED', 'Authentication required');
+    }
+    context.switchToHttp().getRequest<PrincipalRequest>().principal = principal;
+    return true;
+  }
+}
+
+/** Whether `g` (a guard class or instance) is a {@link PrincipalGuard} keeping the final `canActivate`. */
+function isPrincipalGuard(g: unknown): boolean {
+  const proto: unknown = typeof g === 'function' ? g.prototype : g;
+  return (
+    proto instanceof PrincipalGuard &&
+    proto.canActivate === PrincipalGuard.prototype.canActivate
+  );
 }
 
 /**
@@ -36,14 +80,8 @@ export class DefaultDenyGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, targets)) {
       return true;
     }
-    const guards = this.reflector.getAllAndMerge<unknown[]>(
-      GUARDS_METADATA,
-      targets,
-    );
-    return guards.some(
-      (g) =>
-        (typeof g === 'function' && g.prototype instanceof PrincipalGuard) ||
-        g instanceof PrincipalGuard,
-    );
+    return this.reflector
+      .getAllAndMerge<unknown[]>(GUARDS_METADATA, targets)
+      .some(isPrincipalGuard);
   }
 }

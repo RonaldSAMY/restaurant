@@ -618,6 +618,12 @@ So that everyone sees the same state within 2 s.
 **When** it completes
 **Then** the server disconnects `staff-session:{sid}` sockets.
 
+**Given** the global `DefaultDenyGuard` (`APP_GUARD` also runs on gateway handlers) and the global `ErrorEnvelopeFilter` (writes nothing on non-HTTP hosts)
+**When** a client sends any gateway message
+**Then** the handler is reachable only if it is `@Public()` (e.g. `order.subscribe`) or guarded by a `PrincipalGuard` whose `authenticate()` resolves the principal from the handshake cookies; an undecorated handler is denied
+**And** `PrincipalGuard.canActivate` becomes context-aware (today it writes `req.principal` via `switchToHttp()` and throws an HTTP `DomainError`)
+**And** a gateway-scoped filter (`@UseFilters`) answers both handler errors and guard denials with the shared ack `{ error }` shape, and a test covers one allowed and one denied handler.
+
 **Given** a board socket `connect_error` with `UNAUTHENTICATED`
 **When** it occurs
 **Then** the board runs the same refresh flow and reconnects.

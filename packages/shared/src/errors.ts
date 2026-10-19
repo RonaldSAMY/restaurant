@@ -20,6 +20,18 @@ export const ErrorCodeSchema = z.enum([
 /** One machine-readable error code (see {@link ErrorCodeSchema}). */
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
+/**
+ * One field problem in `VALIDATION_FAILED` details (an array of these):
+ * dotted field path (`(root)` for the body itself) and message.
+ */
+export const ValidationIssueSchema = z.object({
+  path: z.string(),
+  message: z.string(),
+});
+
+/** One field problem (see {@link ValidationIssueSchema}). */
+export type ValidationIssue = z.infer<typeof ValidationIssueSchema>;
+
 /** Body of every api error response: `{ error: { code, message, details? } }`. */
 export const ErrorEnvelopeSchema = z.object({
   error: z.object({

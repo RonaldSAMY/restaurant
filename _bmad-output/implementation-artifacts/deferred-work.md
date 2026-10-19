@@ -66,21 +66,26 @@
   summary: The test runners in `compose.test.yaml` also run as root and write `packages/shared/dist` and `src/generated` into the bind mount; include them in the Linux UID/GID fix.
   evidence: Same cause as the 1.1 Linux UID/GID deferral; harmless on macOS Docker Desktop.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-shared-contracts-and-api-conventions.md`
+  status: resolved 2026-10-19 — `spec-pre-epic-2-hardening.md`: verified Prisma 7 validation errors carry the call args in the stack; `ErrorEnvelopeFilter` now logs Prisma errors as name + code + frames (`conventions.int-spec.ts` "logs a Prisma error without its call arguments")
   summary: The error filter logs the full stack, whose first line is the error message; Prisma errors may put call arguments (e.g. password hashes) there.
   evidence: Unverified, medium if true. Settle when Story 3.1 makes the first Prisma write with sensitive data by throwing a Prisma validation error through the filter and inspecting the log; redact or log name + frames only if leaked.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-shared-contracts-and-api-conventions.md`
+  status: resolved 2026-10-19 — `spec-pre-epic-2-hardening.md`: the filter returns without a response on non-`http` hosts and still logs unexpected errors (`error-envelope.filter.spec.ts`); the gateway answers its own errors (Story 3.4 AC)
   summary: The global `@Catch()` ErrorEnvelopeFilter may also run for the planned Socket.IO gateway, where `switchToHttp().getResponse()` is not an express Response.
   evidence: Unverified, medium if true. Settle when the realtime gateway lands by checking whether Nest applies APP_FILTER to WS handlers; if so, guard with `host.getType() !== 'http'`.
 
 ## Deferred from: human review of spec-1-3-shared-contracts-and-api-conventions (2026-10-18)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
+  status: partly resolved 2026-10-19 — `spec-pre-epic-2-hardening.md`: `PrincipalGuard` has a final `canActivate` over abstract `authenticate()` that sets `req.principal` or throws 401, and `DefaultDenyGuard` denies subclasses overriding `canActivate`; logging method + route on 500s and narrowing `DomainError.details` remain open
   summary: In Story 3.1, make `DefaultDenyGuard` require that a principal was actually set (final `canActivate` + abstract `authenticate()` on `PrincipalGuard`, or an interceptor requiring `req.principal`), not only that a `PrincipalGuard` is attached; also log method + route on 500s and narrow `DomainError.details` from `unknown`.
   evidence: Today any `PrincipalGuard` subclass that returns true without setting a principal passes default deny; the first real guards land in 3.1.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
+  status: resolved 2026-10-19 — `spec-pre-epic-2-hardening.md`: moved into Story 3.4 as an acceptance criterion in `planning-artifacts/epics.md`
   summary: Extends the realtime-gateway entry above: the global `DefaultDenyGuard` will also deny every non-`@Public()` gateway handler.
   evidence: `APP_GUARD` applies to WS handlers too, and they have no `@Public()` or `PrincipalGuard` today; settle when the gateway lands.
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-review-fixes.md`
+  status: resolved 2026-10-19 — `spec-pre-epic-2-hardening.md`: `ValidationIssueSchema`/`ValidationIssue` exported from `packages/shared`; the filter types `VALIDATION_FAILED` details as `ValidationIssue[]` (parse with `ValidationIssueSchema.array()`)
   summary: With the first web form showing inline field errors, export `ValidationIssueSchema` (`{path, message}`) from `packages/shared` and type the `VALIDATION_FAILED` `details` with it.
   evidence: `ErrorEnvelopeSchema.details` is `unknown`, so web would parse field issues untyped.
 
@@ -123,3 +128,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
   summary: Fix the spec's audit trail: `review_loop_iteration: 0` despite a recorded triage pass, empty Implementation Notes, and no recorded result for the `API_PREFIX → api/v2` negative check.
   evidence: The acceptance criteria are marked met with no evidence recorded.
+
+## Deferred from: review of spec-pre-epic-2-hardening (2026-10-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-pre-epic-2-hardening.md`
+  summary: Prisma redaction in `ErrorEnvelopeFilter` keys on `name.startsWith('PrismaClient')`; a service rethrowing a Prisma message in a plain `Error`, or a Prisma 7 `DriverAdapterError`, would still log call args or values.
+  evidence: Unverified, medium if true. Settle like the PrismaClientValidationError probe: throw a driver-adapter error (e.g. a unique violation via `@prisma/adapter-pg`) through the filter and inspect the log.
