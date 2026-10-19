@@ -26,9 +26,13 @@ FR3: Placing an Order issues a Guest Session that survives page refresh and retu
 FR4: An Order's status, items, and Guest name can be viewed via its Guest Session or by entering its Order Reference until 24 h after placement; afterwards, and for unknown references, the same "not found" is returned without revealing other Orders; references are non-sequential and cannot be enumerated.
 FR5: An Order Status change made on the Kitchen Board is pushed to the open tracking page without reload in under 2 s.
 FR6: Kitchen Staff can log in with email and password and log out; wrong credentials yield one generic error; access token 5 min, refresh token 1 h rotated on use; session survives page refresh; idle > 1 h requires login; after logout the old session and refresh token are rejected.
-FR7: Only Kitchen Staff can view the Kitchen Board or change an Order Status; anonymous calls and Guest Sessions to staff endpoints are rejected; a Guest Session never grants access to another Order.
+FR7: Only Staff (Kitchen Staff or Manager) can view the Kitchen Board or change an Order Status, and only Managers can view the Manager Dashboard or all-Orders list; anonymous calls and Guest Sessions to staff endpoints are rejected (401); Kitchen Staff on Manager-only endpoints get 403; a Guest Session never grants access to another Order. *(Widened 2026-10-19, Epic 4.)*
 FR8: Kitchen Staff see all open Orders grouped Received / Preparing / Ready, oldest first, with items, quantities, Guest name, and time placed; new Orders and status changes by any staff appear on every open board in under 2 s; Ready stays until Collected; Collected Orders leave the board.
 FR9: Kitchen Staff can advance an Order one step: Take (Received → Preparing), Mark Ready (Preparing → Ready), Mark Collected (Ready → Collected); skipping or moving backwards is rejected; Collected is final; concurrent advances on the same Order — exactly one succeeds.
+FR10: A Manager logs in and out exactly like Kitchen Staff (FR6) on the same login page; after login a Manager lands on the Manager Dashboard and Kitchen Staff on the Kitchen Board.
+FR11: A Manager has a dedicated dashboard with the number of Orders per Order Status and a list of Orders; Kitchen Staff see a "managers only" notice; anonymous or Guest callers are sent to login.
+FR12: A Manager sees all Orders, Collected included, newest first (max 100), with reference, Guest name, items, total, status and time placed, filterable by Order Status; new Orders and status changes appear on an open dashboard in under 2 s.
+FR13: A Manager can Take, Mark Ready and Mark Collected ("deliver") an Order under FR9 rules, and can also use the Kitchen Board.
 
 ### NonFunctional Requirements
 
@@ -83,6 +87,7 @@ FR6: Epic 3 - Staff login/logout, token refresh rotation, revocation
 FR7: Epic 3 - Staff-only board and status changes; guests/anonymous rejected
 FR8: Epic 3 - Kitchen Board grouped, oldest first, live across boards
 FR9: Epic 3 - Forward-only status changes, Collected final, one concurrent winner
+FR7 (widened), FR10, FR11, FR12, FR13: Epic 4 - Staff Roles, Manager login landing, Manager Dashboard, all-Orders list, Manager advances
 
 ## Epic List
 
@@ -97,6 +102,10 @@ A Guest places an Order, gets an Order Reference, returns to it after refresh, l
 ### Epic 3: Kitchen Staff run the board live
 Kitchen Staff log in, see all open Orders grouped Received / Preparing / Ready, advance them forward-only, and every board plus the Guest tracking page updates in under 2 s; logout revokes the session. Completes the UJ-1 + UJ-2 demo.
 **FRs covered:** FR5, FR6, FR7, FR8, FR9
+
+### Epic 4: Managers oversee and run Orders
+A Manager logs in on the staff login page, lands on a dedicated dashboard with per-status counts and every Order (Collected included), filters by status, and takes, readies and collects Orders like Kitchen Staff, all live. Kitchen Staff are kept out of the dashboard. Adds Staff Roles. Phase 2, added by the 2026-10-19 manager sprint change proposal; hand-implemented by Ronald.
+**FRs covered:** FR7 (widened), FR10, FR11, FR12, FR13
 
 ## Epic 1: Guests can browse the Menu
 
@@ -687,3 +696,161 @@ So that api and web cannot drift apart on a URL.
 **When** they run unchanged, with their literal `/api/v1/...` paths
 **Then** all pass, proving every public URL is the same as before
 **And** `api-routes.spec.ts` covers `apiPath` substitution, encoding (`ab 1/` → `ab%201%2F`) and the no-param case.
+
+## Epic 4: Managers oversee and run Orders
+
+A Manager logs in on the staff login page, lands on a dedicated dashboard with per-status counts and every Order (Collected included), filters by status, and takes, readies and collects Orders like Kitchen Staff, all live. Kitchen Staff are kept out of the dashboard. Adds `StaffRole` to `StaffUser`. Hand-implemented by Ronald from test-first task lists in each story spec. "Deliver" means Mark Collected.
+
+### Story 4.1: Staff roles in data, seed and session
+
+As a Manager,
+I want my account to carry the Manager role through login, refresh and every request,
+So that the api can tell me apart from Kitchen Staff.
+
+**Implements:** FR7, FR10; AD-4, AD-5, AD-11, AD-16
+
+**Acceptance Criteria:**
+
+**Given** a migration adding Prisma enum `StaffRole { KITCHEN MANAGER }` and `StaffUser.role` (default `KITCHEN`)
+**When** it runs on a database with existing staff
+**Then** every existing staff user has role `KITCHEN`.
+
+**Given** shared `StaffRoleSchema` (`z.enum(['KITCHEN','MANAGER'])`) and `StaffMeSchema` extended with `role`
+**When** login or `GET auth/me` succeeds
+**Then** the response is `StaffMe { id, email, role }`.
+
+**Given** login, then refresh
+**When** tokens are issued
+**Then** the access JWT carries `role`, and refresh re-reads it from `StaffUser` (a missing account → `401`)
+**And** `StaffAuthGuard` yields the principal `{ kind: 'staff', staffId, sid, role }`.
+
+**Given** `SEED_MANAGER_EMAIL` / `SEED_MANAGER_PASSWORD` (in `SeedEnvSchema` and `.env.example`)
+**When** the seed runs twice
+**Then** it upserts the Kitchen Staff user with role `KITCHEN` and the manager with role `MANAGER`, idempotently, and an existing user's role is updated to the seeded one.
+
+**Given** the existing suites
+**When** they run
+**Then** they pass, with only the `role` additions to fixtures and expectations.
+
+### Story 4.2: Manager all-Orders API
+
+As a Manager,
+I want one endpoint that returns per-status counts and the newest Orders, optionally by status,
+So that the dashboard has its data in one call.
+
+**Implements:** FR7, FR12; AD-3, AD-4, AD-13, AD-19
+
+**Acceptance Criteria:**
+
+**Given** `ManagerGuard` in `auth` (a `PrincipalGuard`)
+**When** a route uses it
+**Then** a Manager is admitted, a valid Kitchen Staff session gets `403 FORBIDDEN`, and anonymous or Guest Session calls get `401 UNAUTHENTICATED`.
+
+**Given** a Manager session
+**When** `GET /api/v1/manager/orders` is called
+**Then** it returns `ManagerOrdersResponse { counts, orders }` where `counts` has all four statuses (zero included, all time) and `orders` is `KitchenOrder[]`, Collected included, `placedAt` descending (`id` descending on ties), at most 100, with `Cache-Control: no-store`.
+
+**Given** `?status=READY`
+**When** called
+**Then** `orders` holds only READY Orders while `counts` still covers every status
+**And** an invalid `status` → `400 VALIDATION_FAILED`.
+
+**Given** a Manager session
+**When** `PATCH /api/v1/kitchen/orders/:id/status` is called
+**Then** it behaves exactly as for Kitchen Staff (FR13): forward steps succeed, others `409`.
+
+**Given** shared `ApiRoutes.managerOrders = 'manager/orders'`, `ManagerOrdersQuerySchema`, `ManagerOrdersResponseSchema`
+**When** api and web use them
+**Then** no path literal is added to `apps/api/src`.
+
+### Story 4.3: Role-aware login and Manager page shell
+
+As a Manager,
+I want to land on my own page after login and log out from it,
+So that I start where my work is.
+
+**Implements:** FR10, FR11; AD-5, AD-12
+
+**Acceptance Criteria:**
+
+**Given** the login page (`/kitchen/login`, heading "Staff login")
+**When** login succeeds
+**Then** `role: 'MANAGER'` goes to `/manager` and `role: 'KITCHEN'` goes to `/kitchen`.
+
+**Given** `/manager` as a Manager
+**When** it loads
+**Then** it shows a "Manager Dashboard" heading, the Manager's email, a link to `/kitchen`, and a Log out button that ends the session and goes to `/kitchen/login`.
+
+**Given** `/manager` as Kitchen Staff
+**When** the api answers `403 FORBIDDEN`
+**Then** the page shows "This page is for managers only." with a link to `/kitchen`, and no dashboard data.
+
+**Given** `/manager` without a session
+**When** it loads
+**Then** the existing 401 → refresh → `/kitchen/login` flow runs.
+
+### Story 4.4: Manager Dashboard: counts, list, filter, actions
+
+As a Manager,
+I want counts per status, a list of all Orders with a status filter, and the same action buttons as the board,
+So that I can oversee and step in.
+
+**Implements:** FR11, FR12, FR13; NFR4
+
+**Acceptance Criteria:**
+
+**Given** `/manager`
+**When** it loads
+**Then** four count tiles (Received, Preparing, Ready, Collected) show `counts`, and a table lists `orders` newest first with reference, Guest name, items, total (formatted from cents), status and time placed.
+
+**Given** the status filter (All, Received, Preparing, Ready, Collected)
+**When** I pick a status
+**Then** the list is refetched with `?status=` and the tiles still show every status.
+
+**Given** a row that is not Collected
+**When** I press its action (Take / Mark Ready / Mark Collected)
+**Then** `PATCH kitchen/orders/:id/status` runs and the dashboard refetches
+**And** a `409 INVALID_TRANSITION` refetches and shows "That Order already moved. Dashboard refreshed."
+
+**Given** a desktop or tablet viewport
+**When** the dashboard is shown
+**Then** tiles sit in one row and the table is readable.
+
+### Story 4.5: Live updates on the Manager Dashboard
+
+As a Manager,
+I want new Orders and status changes to show up without reloading,
+So that the dashboard is always current.
+
+**Implements:** FR12; NFR5; AD-10
+
+**Acceptance Criteria:**
+
+**Given** `/manager` open
+**When** a Guest places an Order or any Staff advances one
+**Then** within 2 s the counts and list reflect it, via the existing staff socket (`kitchen` room) and a dashboard refetch on `order.created` / `order.status-changed`.
+
+**Given** the socket (re)connects
+**When** it connects
+**Then** the dashboard refetches its snapshot.
+
+**Given** a burst of events
+**When** several arrive at once
+**Then** at most one refetch is in flight; one more runs after it if events arrived meanwhile.
+
+### Story 4.6: Manager end-to-end test
+
+As the Builder,
+I want UJ-3 automated against the full stack,
+So that the Manager journey stays proven.
+
+**Implements:** FR10–FR13 (UJ-3); AD-16
+
+**Depends on:** Story 3.5 (Playwright harness).
+
+**Acceptance Criteria:**
+
+**Given** the Playwright suite from Story 3.5
+**When** it runs
+**Then** a Manager logs in and lands on `/manager`; a Guest order appears in under 2 s; the Manager takes it, marks it Ready and Collected; the Guest page shows each status; the Manager logs out
+**And** a Kitchen Staff context opening `/manager` sees "managers only".

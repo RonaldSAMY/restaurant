@@ -2,7 +2,7 @@
 title: Restaurant Web App PRD
 status: final
 created: 2026-10-17
-updated: 2026-10-17
+updated: 2026-10-19
 ---
 
 # PRD: Restaurant Web App
@@ -22,15 +22,21 @@ The MVP deliberately runs a single kitchen with no payment. Later phases bring b
 - **Builder (Ronald):** practise and demonstrate a realistic full-stack feature set — secured APIs, session handling, caching, live updates, tested auth rules.
 - **Guest:** see what's on offer, order quickly with no sign-up, and know when the food is ready.
 - **Kitchen Staff:** see every incoming Order in one place and tell Guests where it stands with one action.
+- **Manager:** see every Order and how the kitchen is doing at a glance, and step in to take or hand over Orders when the kitchen is busy.
 
 ### 2.2 Key User Journeys
 - **UJ-1. Lena orders lunch without an account.** Lena opens the site, browses the Menu, adds two dishes and a drink, enters her name, and places the Order. She sees her Order Reference and a status of *Received*. She accidentally refreshes the page — her Order is still there. A few minutes later the status changes to *Preparing*, then *Ready*, without her reloading. She collects her food at the counter and the page shows *Collected*; her Guest Session ends. The next day she comes back and orders from scratch, as if for the first time. **Edge case:** on another device, she types her Order Reference to see the same status.
 - **UJ-2. Omar runs the kitchen board.** Omar logs in as Kitchen Staff and sees the Kitchen Board with Lena's Order in *Received*. He takes it (*Preparing*), marks it *Ready* once it's plated, and marks it *Collected* when Lena picks it up — it leaves the board. At shift end he logs out; his session can no longer be used.
+- **UJ-3. Mia manages the evening shift.** Mia logs in on the same staff login page and lands on the Manager Dashboard: counts of Orders per status and a list of all Orders, newest first, including Collected ones. The kitchen is busy, so she takes a Received Order herself and, when it's plated, marks it Ready and then Collected as she hands it over. Every change shows up live on the Kitchen Board and the Guest's tracking page. Omar (Kitchen Staff) tries to open the dashboard and is told it is for managers only. At the end of the shift Mia logs out.
 
 ## 3. Glossary
 - **Guest** — an unauthenticated customer. Places Orders; holds a Guest Session.
 - **Guest Session** — a session issued to a Guest when they place an Order; lets them return to that Order after a page refresh without re-entering the Order Reference. One Guest Session tracks one Order. It ends when that Order is *Collected* or 24 hours after the Order was placed, whichever comes first. While it is active, the Guest cannot place another Order.
-- **Kitchen Staff** — an authenticated user who manages Orders on the Kitchen Board. The only role that logs in for the MVP.
+- **Staff** — an authenticated user with one Staff Role: Kitchen Staff or Manager.
+- **Staff Role** — `KITCHEN` or `MANAGER`; set by the seed, no UI to change it.
+- **Kitchen Staff** — Staff with role `KITCHEN`; manages Orders on the Kitchen Board.
+- **Manager** — Staff with role `MANAGER`; everything Kitchen Staff can do, plus the Manager Dashboard.
+- **Manager Dashboard** — the Manager's view of all Orders (Collected included) with per-status counts and the same status actions as the Kitchen Board.
 - **Kitchen Board** — the Kitchen Staff view of open Orders (not yet *Collected*) grouped by Order Status.
 - **Menu** — the public list of Menu Items, grouped by category.
 - **Menu Item** — a dish or drink with name, description, price, and category.
@@ -92,7 +98,8 @@ Kitchen Staff can log in with email and password and log out.
 - After logout, the old session and its refresh token are rejected.
 
 #### FR-7: Role-Based Authorization
-Only Kitchen Staff can view the Kitchen Board or change an Order Status.
+Only Staff (Kitchen Staff or Manager) can view the Kitchen Board or change an Order Status. Only Managers can view the Manager Dashboard or the all-Orders list. *(Widened 2026-10-19 for §4.6.)*
+- Kitchen Staff calling a Manager-only endpoint are rejected with 403.
 - Requests with no session or a Guest Session to Kitchen Staff endpoints are rejected (401/403).
 - A Guest Session never grants access to any Order other than its own.
 
@@ -109,10 +116,31 @@ Kitchen Staff can move an Order forward one step: Take (Received → Preparing),
 - Skipping a step or moving backwards is rejected. `[ASSUMPTION: forward-only, no undo]`
 - *Collected* is final; a *Collected* Order cannot change again.
 
+### 4.6 Manager
+**Description:** Managers log in like Kitchen Staff, oversee every Order on a dedicated dashboard, and can advance Orders themselves. Accounts are seeded; there is no sign-up or user management. Realizes UJ-3. *(Added 2026-10-19, Phase 2.)*
+
+#### FR-10: Manager Login and Logout
+A Manager logs in and out exactly as in FR-6, on the same login page.
+- After login, a Manager lands on the Manager Dashboard; Kitchen Staff land on the Kitchen Board.
+- Token lifetimes, refresh and revocation follow FR-6.
+
+#### FR-11: Manager Dashboard
+A Manager has a dashboard showing the number of Orders in each Order Status and a list of Orders.
+- Only Managers can open it; Kitchen Staff see a "managers only" notice, and anonymous or Guest callers are sent to login.
+
+#### FR-12: View All Orders
+A Manager can see all Orders, Collected included, newest first, with reference, Guest name, items, total, status and time placed, and can filter by Order Status.
+- At most 100 Orders are listed per view `[ASSUMPTION: no pagination in this phase]`.
+- New Orders and status changes appear on an open dashboard in under 2 seconds.
+
+#### FR-13: Manager Advances Orders
+A Manager can Take, Mark Ready and Mark Collected ("deliver") an Order, under the same FR-9 rules.
+- A Manager can also use the Kitchen Board.
+
 ## 5. Cross-Cutting NFRs
 - **Security:** Passwords are stored hashed. Every endpoint enforces authorization on the server.
 - **Data retention:** Every Order is stored permanently, including after Guest access ends, for future customer accounts and order history.
-- **Tests:** Automated tests cover FR-2 validation, FR-3 one-open-Order rule and Guest Session expiry, FR-4 24-hour access window, FR-6 login/logout/refresh/revocation, FR-7 authorization (every protected endpoint rejects Guest Sessions and anonymous calls), and FR-9 status transitions.
+- **Tests:** Automated tests cover FR-2 validation, FR-3 one-open-Order rule and Guest Session expiry, FR-4 24-hour access window, FR-6 login/logout/refresh/revocation, FR-7 authorization (every protected endpoint rejects Guest Sessions and anonymous calls), and FR-9 status transitions. Phase 2 adds FR-10 role-based landing, FR-12 Manager-only access (Kitchen Staff 403, Guest/anonymous 401), and FR-13 Manager transitions.
 - **Responsiveness:** The Menu and tracking pages work on a phone screen. The Kitchen Board targets a tablet or desktop.
 
 ## 6. MVP Scope
@@ -131,6 +159,9 @@ Public Menu (seeded), guest ordering, Guest Session, tracking by Order Reference
 - **Message queue** — deferred.
 - **Post-MVP:** customer accounts with order history; promo coupons based on order history.
 
+### 6.3 Phase 2: Manager module (added 2026-10-19)
+Staff Roles, a seeded Manager account, Manager Dashboard, all-Orders list, Manager status actions, live dashboard updates. Still out of scope: staff/user management UI, menu management UI, reports and analytics beyond per-status counts, pagination.
+
 ## 7. Success
 The demo works end to end: UJ-1 and UJ-2 run in one session with two browsers. All tests listed in §5 pass. **Counter-metric:** don't grow scope to "look complete" — features beyond §6.1 wait until after the 2 days.
 
@@ -145,3 +176,5 @@ Accepted as MVP defaults at finalize (2026-10-17); revisit when customer account
 - §4.4 — Kitchen Staff accounts are seeded; no sign-up.
 - §4.4 FR-6 — Refresh token rotates on use; idle >1 hour requires login.
 - §4.5 FR-9 — Status changes are forward-only with no undo.
+- §4.6 FR-12 — all-Orders list capped at 100, newest first; counts are all-time.
+- §4.6 FR-13 — "deliver" means Mark Collected; no new status.

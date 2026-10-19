@@ -7,8 +7,8 @@ paradigm: 'modular monolith (NestJS feature modules, pure domain core behind por
 scope: 'Restaurant Web App MVP (2-day timebox) — public Menu, guest ordering + Guest Session, tracking with live updates, Kitchen Staff auth, Kitchen Board; dockerized pnpm monorepo with shared contract package, tests and CI'
 status: final
 created: '2026-10-17'
-updated: '2026-10-17'
-binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, NFR-security, NFR-retention, NFR-tests, NFR-responsiveness]
+updated: '2026-10-19'
+binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-10, FR-11, FR-12, FR-13, NFR-security, NFR-retention, NFR-tests, NFR-responsiveness]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-restuarent-2026-10-17/prd.md
   - _bmad-output/planning-artifacts/prds/prd-restuarent-2026-10-17/addendum.md
@@ -90,15 +90,15 @@ The Socket.IO `Server` is exposed through a dependency-free `common/socket-serve
 
 - **Binds:** FR-3, FR-6, FR-7, all endpoints and socket connections
 - **Prevents:** a Guest Session credential satisfying a staff check; routes that forget authorization; tests and guards disagreeing on status codes.
-- **Rule:** The principal is a discriminated union `{ kind: 'staff', staffId, sid } | { kind: 'guest', sid, orderId }`. A global guard rejects any route that carries none of `@Public()`, `@UseGuards(StaffAuthGuard)`, `@UseGuards(GuestSessionGuard)`. `StaffAuthGuard` accepts only a valid `access_token` whose `sid` exists in Redis. Staff routes return `401 UNAUTHENTICATED` for anonymous callers **and** guests alike; `403 FORBIDDEN` is used only when a valid principal reaches a resource that is not its own. A future Customer is a third `kind` with its own guard.
+- **Rule:** The principal is a discriminated union `{ kind: 'staff', staffId, sid, role } | { kind: 'guest', sid, orderId }`, where `role` is shared `StaffRole` (`KITCHEN` | `MANAGER`) (amended 2026-10-19, Epic 4). A global guard rejects any route that carries none of `@Public()`, `@UseGuards(StaffAuthGuard)`, `@UseGuards(GuestSessionGuard)`. `StaffAuthGuard` accepts only a valid `access_token` whose `sid` exists in Redis. Staff routes return `401 UNAUTHENTICATED` for anonymous callers **and** guests alike; `ManagerGuard` (a `PrincipalGuard` in `auth`) admits only `role: 'MANAGER'`: it throws `403 FORBIDDEN` for other staff and `401 UNAUTHENTICATED` exactly like `StaffAuthGuard` otherwise. `403 FORBIDDEN` is used only when a valid principal reaches a resource that is not its own or needs a role it lacks. Role checks live in guards, never in controllers or services. A future Customer is a third `kind` with its own guard.
 
 ### AD-5 — Staff session: JWTs in httpOnly cookies, revocable `[ADOPTED]`
 
 - **Binds:** FR-6, FR-7
 - **Prevents:** token plumbing differing between HTTP and WebSocket; a logged-out access token staying usable; each page inventing its own refresh.
 - **Rule:**
-  - Login sets `access_token` (JWT 5 min, claims `staffId`, `sid`, `Path=/`) and `refresh_token` (JWT 1 h, claims `sid`, `jti`, `Path=/api/v1/auth`), both `HttpOnly; Secure; SameSite=Strict`.
-  - Redis: `auth:session:{sid}` → `staffId` and `auth:refresh:{jti}` → `sid` (token strings are never stored; the JWT signature proves authenticity, Redis proves it's still live). Refresh consumes the presented `jti` atomically (`GETDEL`) and issues a new pair; an unknown `jti` → 401. Logout deletes both keys and calls `server.in('staff-session:{sid}').disconnectSockets()`.
+  - Login sets `access_token` (JWT 5 min, claims `staffId`, `sid`, `role`, `Path=/`) and `refresh_token` (JWT 1 h, claims `sid`, `jti`, `Path=/api/v1/auth`), both `HttpOnly; Secure; SameSite=Strict`.
+  - Redis: `auth:session:{sid}` → `staffId` and `auth:refresh:{jti}` → `sid` (token strings are never stored; the JWT signature proves authenticity, Redis proves it's still live). Refresh consumes the presented `jti` atomically (`GETDEL`) and issues a new pair; an unknown `jti` → 401. Refresh re-reads `role` from `StaffUser` (a missing account → 401), so a role change applies within one access-token lifetime. Logout deletes both keys and calls `server.in('staff-session:{sid}').disconnectSockets()`.
   - Passwords hashed with argon2id behind a `PasswordHasher` port (seed uses the same adapter). Wrong email or password → one generic `INVALID_CREDENTIALS`.
   - Web: `apps/web/lib/api.ts` is the only fetch wrapper. On 401 from a staff route it calls `POST /api/v1/auth/refresh` once (single-flight per tab) and retries; a second 401 navigates to `/kitchen/login`. Socket `connect_error` with `UNAUTHENTICATED` runs the same refresh, then reconnects. JavaScript never reads a token.
 
@@ -167,7 +167,7 @@ sequenceDiagram
 
 - **Binds:** FR-1, seed
 - **Prevents:** seed and api disagreeing on the cache key; stale or empty Menu after re-seed; seed destroying retained Orders.
-- **Rule:** `MenuService` is the only reader/writer of `menu:v1` (whole grouped Menu JSON, no TTL): hit → return; miss → load from Postgres, write (never cache an empty Menu), return. The seed **upserts** Menu Items by fixed UUIDs and staff by unique `email`, never deletes, then calls `MenuCache.invalidate()`. It boots a `SeedModule` importing only `MenuModule`, the `PasswordHasher` adapter, Prisma and Redis. Staff demo credentials come from `SEED_STAFF_EMAIL` / `SEED_STAFF_PASSWORD`.
+- **Rule:** `MenuService` is the only reader/writer of `menu:v1` (whole grouped Menu JSON, no TTL): hit → return; miss → load from Postgres, write (never cache an empty Menu), return. The seed **upserts** Menu Items by fixed UUIDs and staff and the manager by unique `email`, each with its `role`, never deletes, then calls `MenuCache.invalidate()`. It boots a `SeedModule` importing only `MenuModule`, the `PasswordHasher` adapter, Prisma and Redis. Staff demo credentials come from `SEED_STAFF_EMAIL` / `SEED_STAFF_PASSWORD` (role `KITCHEN`) and `SEED_MANAGER_EMAIL` / `SEED_MANAGER_PASSWORD` (role `MANAGER`).
 
 ### AD-12 — Frontend data access and rendering
 
@@ -243,7 +243,7 @@ flowchart LR
 
 - **Binds:** FR-1–FR-9, apps/web, apps/api
 - **Prevents:** web and api inventing different paths, bodies, or Order shapes.
-- **Rule:** These are the MVP endpoints; schemas named here live in `packages/shared`. `GuestOrderView` = `{ reference, guestName, status, items[{ name, quantity, unitPriceCents }], totalCents, placedAt }`; `KitchenOrder` = `GuestOrderView` + `id`.
+- **Rule:** These are the MVP endpoints; schemas named here live in `packages/shared`. `GuestOrderView` = `{ reference, guestName, status, items[{ name, quantity, unitPriceCents }], totalCents, placedAt }`; `KitchenOrder` = `GuestOrderView` + `id`. `StaffMe` = `{ id, email, role }`. "Staff" in the Guard column admits both roles.
 - **Paths:** the `/api/v1` prefix and every endpoint path (full template, e.g. `orders/by-reference/:reference`) are defined once in `packages/shared/src/api-routes.ts`; the api and web read them from there, and `apiPath` encodes params. Until Story 3.6 lands, sub-paths are still typed in controller decorators and `apps/web/lib/api.ts`. The compose api healthcheck URL and the tests keep literal `/api/v1` paths on purpose.
 
 | Method + path | Guard | Request | Response |
@@ -259,6 +259,7 @@ flowchart LR
 | `GET /api/v1/auth/me` | Staff | — | `StaffMe` |
 | `GET /api/v1/kitchen/orders` | Staff | — | `KitchenOrder[]` (not COLLECTED, `placedAt` ascending) |
 | `PATCH /api/v1/kitchen/orders/:id/status` | Staff | `AdvanceStatusRequest` `{ to: OrderStatus }` | `200 KitchenOrder` |
+| `GET /api/v1/manager/orders?status=` | Manager | `ManagerOrdersQuery` `{ status?: OrderStatus }` | `ManagerOrdersResponse` `{ counts: Record<OrderStatus, number>, orders: KitchenOrder[] }` (`placedAt` descending, max 100) |
 
 ## Consistency Conventions
 
@@ -320,7 +321,7 @@ restaurant/                  # repo root (package scope @restaurant)
       test/                   # integration + fixture builders + cookie helper
       Dockerfile
     web/                      # Next.js App Router
-      app/                    # / (menu), /track, /track/[reference], /kitchen, /kitchen/login
+      app/                    # / (menu), /track, /track/[reference], /kitchen, /kitchen/login, /manager
       lib/api.ts              # single fetch wrapper + refresh
       e2e/                    # Playwright
       Dockerfile
@@ -360,6 +361,7 @@ erDiagram
     uuid id
     string email
     string passwordHash
+    string role
   }
 ```
 
@@ -378,6 +380,9 @@ erDiagram
 | FR-7 Role-based authz | global guard + guards in `auth`/`orders` | AD-4, AD-16 |
 | FR-8 View board | `api/orders` kitchen controller, `web/app/kitchen` | AD-10, AD-12, AD-19 |
 | FR-9 Advance status | `api/orders` domain + adapter | AD-7 |
+| FR-10 Manager login/landing | `api/auth` (role claim, `ManagerGuard`), `web/app/kitchen/login` | AD-4, AD-5, AD-11 |
+| FR-11/FR-12 Manager Dashboard, all Orders | `api/orders` manager controller, `web/app/manager` | AD-4, AD-10, AD-19 |
+| FR-13 Manager advances | existing kitchen routes | AD-4, AD-7 |
 | NFR security / retention / tests / responsive | cross-cutting | AD-4, AD-5, AD-8, AD-9, AD-12, AD-16 |
 | Containerization, CI, quality | repo root | AD-1, AD-14, AD-15, AD-17, AD-18 |
 
@@ -393,5 +398,6 @@ erDiagram
 | Public hosting, real TLS certs, backups, Redis persistence tuning | Demo runs locally and in CI only. |
 | Structured logging, metrics, tracing | Built-in Logger suffices for the demo. |
 | Client data-fetching library | `lib/api.ts` + socket state covers three pages. |
+| Staff/user management UI; pagination and date filters on the all-Orders list | Seeded accounts and 100 newest suffice for Phase 2; revisit with reports. |
 | OpenAPI docs | Generate from Zod (`z.toJSONSchema`) later. |
 | Exact patch versions | Locked in lockfile / image tags at scaffold. |

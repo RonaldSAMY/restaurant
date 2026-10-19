@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 10-17-2026 17:24
-last_updated: 10-19-2026 21:50
+last_updated: 10-19-2026 23:00
 project: restuarent
 project_key: NOKEY
 tracking_system: file-system
@@ -59,6 +59,15 @@ development_status:
   3-5-end-to-end-demo-tests: backlog
   3-6-endpoint-sub-paths-in-shared-api-routes: done
   epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-staff-roles-in-data-seed-and-session: ready-for-dev
+  4-2-manager-all-orders-api: ready-for-dev
+  4-3-role-aware-login-and-manager-page-shell: ready-for-dev
+  4-4-manager-dashboard-counts-list-filter-actions: ready-for-dev
+  4-5-live-updates-on-the-manager-dashboard: ready-for-dev
+  4-6-manager-end-to-end-test: backlog # needs 3-5 Playwright harness
+  epic-4-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-commit-the-prettier-fix-to-configure-app"
     epic: 1
