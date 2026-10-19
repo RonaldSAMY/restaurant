@@ -93,3 +93,33 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-4-menu-api-with-cache-and-seed.md`
   summary: The `seed.ts` entry point (what compose's `seed` service runs) is executed by no test; removing its `seedMenu` call or passing `[]` passes every check and a fresh stack serves an empty Menu.
   evidence: `menu.int-spec.ts` rebuilds the entry inline via `SeedModule` + `seedMenu`; CI only `test -f dist/seed/seed.js`. Needs an exported `seed()` with an import guard, or a subprocess test.
+
+## Deferred from: review of spec-centralise-api-routes (2026-10-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Guard the compose api healthcheck URL against drift from `api-routes.ts`: a vitest asserting `compose.yaml` contains `localhost:3000${apiPath(ApiRoutes.health)}` (plain string match), and reword the `compose.yaml` comment to name `apiPath(ApiRoutes.health)`, not only `API_PREFIX`. Correct the spec's "one-line edit" claim: a version bump also edits the healthcheck.
+  evidence: Only a comment ties them; bumping `API_PREFIX` or renaming the health route passes every test and leaves the api never healthy, so web and proxy never start.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Make the CI prod-image check (`.github/workflows/ci.yml:35`) load `dist/app.module` (pulls in the controllers that import `ApiRoutes`) and assert `API_PREFIX === 'api/v1'`, not only `require('./dist/configure-app')`.
+  evidence: The current step proves the module resolves; a prod image whose shared dist lacks or changes the routes export stays green.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: `apiPath` assumes `API_PREFIX` has no leading or trailing slash; document that in the TSDoc with an assert test, or normalise slashes in `apiPath`.
+  evidence: `'/api/v2'` makes web build `//api/v2/menu` while Nest normalises its prefix and serves `/api/v2/menu`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Build the web menu URL with `new URL(apiPath(ApiRoutes.menu), API_INTERNAL_URL)` in `apps/web/lib/menu.ts:33`, or reject a trailing slash/path in the env schema.
+  evidence: `z.url()` accepts `http://api:3000/`, which yields `//api/v1/menu`, a 404 and a null menu. Pre-existing, not introduced by the refactor.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Document in the `API_PREFIX` TSDoc that a version bump is breaking: deploy api and web together, or mount both prefixes during the transition.
+  evidence: api and web ship as separate images; a rolling deploy or cached old web build calls `/api/v1/*` against an api serving only v2.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Dev watch does not restart the api when a shared route value changes; include `packages/shared/dist` in the nest watch or document a restart.
+  evidence: `nest --watch` ignores the shared dist, so the api keeps the old paths while web hot-reloads the new ones. Low; route values rarely change.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Point the `Caddyfile:9` comment at `API_PREFIX` in `packages/shared/src/api-routes.ts` and note its first segment must stay `/api`.
+  evidence: The comment hard-codes `/api/v1` and goes stale on the first version bump.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Clarify `ARCHITECTURE-SPINE.md:71`: say which decision was amended (AD-2 vs AD-19) and record the superseded "no route constants" rule and why it was reversed.
+  evidence: "matching AD-19 (amended 2026-10-19)" is ambiguous; a later reader may revert the constants as a rule violation.
+- source_spec: `_bmad-output/implementation-artifacts/spec-centralise-api-routes.md`
+  summary: Fix the spec's audit trail: `review_loop_iteration: 0` despite a recorded triage pass, empty Implementation Notes, and no recorded result for the `API_PREFIX → api/v2` negative check.
+  evidence: The acceptance criteria are marked met with no evidence recorded.
