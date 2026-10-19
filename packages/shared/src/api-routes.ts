@@ -7,7 +7,10 @@ export const API_PREFIX = 'api/v1';
 /** Endpoint paths relative to {@link API_PREFIX}. */
 export const ApiRoutes = { health: 'health', menu: 'menu' } as const;
 
+/** One of the {@link ApiRoutes} values. */
+export type ApiRoute = (typeof ApiRoutes)[keyof typeof ApiRoutes];
+
 /** Root-relative URL path for an endpoint, e.g. `/api/v1/menu`. */
-export function apiPath(route: string): string {
+export function apiPath(route: ApiRoute): string {
   return `/${API_PREFIX}/${route}`;
 }

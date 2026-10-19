@@ -72,11 +72,12 @@ export const API_PREFIX = 'api/v1';
 /** Endpoint paths relative to {@link API_PREFIX}. */
 export const ApiRoutes = { health: 'health', menu: 'menu' } as const;
 /** Root-relative URL path for an endpoint, e.g. `/api/v1/menu`. */
-export function apiPath(route: string): string { ... }
+export type ApiRoute = (typeof ApiRoutes)[keyof typeof ApiRoutes];
+export function apiPath(route: ApiRoute): string { ... }
 ```
 
 - Later stories add their resources here, e.g. `orders: 'orders'`, and their sub-paths stay in the controllers.
-- The refresh cookie's `Path` in Story 3.1 should use `apiPath('auth')`.
+- Story 3.1 adds `auth: 'auth'` to `ApiRoutes` and sets the refresh cookie's `Path` to `apiPath(ApiRoutes.auth)`; `apiPath` only accepts `ApiRoutes` values.
 
 ## Verification
 
