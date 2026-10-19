@@ -96,6 +96,7 @@ Branch: `git switch main && git switch -c story/4-3-manager-shell` (after 4.2 is
   - both ok → state `ready` with `me`.
 
   Keep the result of `getManagerOrders` unused for now; 4.4 will use it. Use the `cancelled` flag as `KitchenBoard` does. Then create `app/manager/page.tsx`. *Done when:* `pnpm typecheck` is clean.
+- [ ] **T7b 🟢 Code**: add `{ href: '/manager', label: 'Manager' }` to `NAV_LINKS` in `app/layout.tsx`. The nav shows it to everyone; the page itself handles access. *Done when:* the link opens `/manager`.
 - [ ] **T8 ✅ Check by hand**:
   - log in as the manager → `/manager` shows your email; Log out → `/kitchen/login`;
   - log in as staff → `/kitchen`; then type `/manager` → "managers only";
