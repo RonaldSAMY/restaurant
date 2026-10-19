@@ -3,11 +3,17 @@ import {
   apiPath,
   ErrorEnvelopeSchema,
   GuestOrderViewSchema,
+  KitchenOrderSchema,
+  StaffMeSchema,
   type ErrorEnvelope,
   type GuestOrderView,
+  type KitchenOrder,
+  type LoginRequest,
+  type OrderStatus,
   type PlaceOrderRequest,
+  type StaffMe,
 } from '@restaurant/shared';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 /** How long to wait for the api before reporting a network error. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -79,5 +85,84 @@ export function getOrderByReference(
   return request(
     `${apiPath(ApiRoutes.orders)}/by-reference/${encodeURIComponent(reference)}`,
     GuestOrderViewSchema,
+  );
+}
+
+/** Where a staff caller goes once its session cannot be refreshed. */
+const STAFF_LOGIN_PAGE = '/kitchen/login';
+
+/** The in-flight `auth/refresh`, shared by every staff call in this tab. */
+let refreshing: Promise<ApiResult<undefined>> | null = null;
+
+/** Starts `POST auth/refresh`, or joins the one already in flight. */
+function refreshSession(): Promise<ApiResult<undefined>> {
+  refreshing ??= request(`${apiPath(ApiRoutes.auth)}/refresh`, z.undefined(), {
+    method: 'POST',
+  }).finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+/**
+ * {@link request} for staff routes: on `401 UNAUTHENTICATED` it awaits one
+ * shared refresh and retries once. A failed refresh or a second 401 sends
+ * the tab to the login page and returns the error.
+ */
+async function staffRequest<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+): Promise<ApiResult<T>> {
+  const first = await request(path, schema, init);
+  if (first.ok || first.error.code !== 'UNAUTHENTICATED') return first;
+  const refreshed = await refreshSession();
+  if (!refreshed.ok) {
+    window.location.assign(STAFF_LOGIN_PAGE);
+    return { ok: false, error: refreshed.error };
+  }
+  const retry = await request(path, schema, init);
+  if (!retry.ok && retry.error.code === 'UNAUTHENTICATED')
+    window.location.assign(STAFF_LOGIN_PAGE);
+  return retry;
+}
+
+/** `POST /api/v1/auth/login`: sets the staff cookies on success. */
+export function login(body: LoginRequest): Promise<ApiResult<StaffMe>> {
+  return request(`${apiPath(ApiRoutes.auth)}/login`, StaffMeSchema, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** `POST /api/v1/auth/logout`: revokes the session and clears the cookies. */
+export function logout(): Promise<ApiResult<undefined>> {
+  return staffRequest(`${apiPath(ApiRoutes.auth)}/logout`, z.undefined(), {
+    method: 'POST',
+  });
+}
+
+/** `GET /api/v1/kitchen/orders`: every open Order, oldest first. */
+export function listKitchenOrders(): Promise<ApiResult<KitchenOrder[]>> {
+  return staffRequest(
+    apiPath(ApiRoutes.kitchenOrders),
+    z.array(KitchenOrderSchema),
+  );
+}
+
+/** `PATCH /api/v1/kitchen/orders/:id/status`: moves the Order to `to`. */
+export function advanceOrder(
+  id: string,
+  to: OrderStatus,
+): Promise<ApiResult<KitchenOrder>> {
+  return staffRequest(
+    `${apiPath(ApiRoutes.kitchenOrders)}/${encodeURIComponent(id)}/status`,
+    KitchenOrderSchema,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ to }),
+    },
   );
 }

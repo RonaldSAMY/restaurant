@@ -155,3 +155,12 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-5-order-tracking-pages.md`
   summary: When 3.4 adds live status updates, make `.order-status` an `aria-live="polite"` region so changes are announced.
   evidence: The status is a one-time snapshot today. Live changes would be silent to screen readers.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: Staff refresh failing for a non-auth reason (network/timeout/5xx → INTERNAL) still redirects to `/kitchen/login`; consider redirecting only on UNAUTHENTICATED.
+  evidence: `staffRequest` in apps/web/lib/api.ts redirects on any `!refreshed.ok`; frozen 3.3 intent says "if the refresh fails", so narrowing needs a human decision.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: KitchenBoard advance outcomes (409 refetch + notice, generic error, pending reset) have no automated test.
+  evidence: kitchen.spec.tsx never renders KitchenBoard; cheapest fix is a pure `noticeFor(code, reloaded)` helper with an it.each.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-staff-login-page-and-kitchen-board.md`
+  summary: Login submit (validate → login → router.replace) and logout navigation have no automated test.
+  evidence: kitchen.spec.tsx mocks useRouter as `{}`; only static markup and describeLoginError are checked.
