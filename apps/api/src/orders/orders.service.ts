@@ -116,6 +116,24 @@ export class OrdersService {
     return toGuestView(order);
   }
 
+  /**
+   * Returns the Guest view of the Order with `reference` (any letter case)
+   * while `clock.now() < placedAt + 24 h`; Collected Orders stay visible.
+   * @throws DomainError `ORDER_NOT_FOUND`, identical for malformed, unknown
+   *   and expired references.
+   */
+  async byReference(reference: string): Promise<GuestOrderView> {
+    const ref = OrderReference.normalize(reference);
+    const order = ref ? await this.orders.findByReference(ref) : null;
+    // The lookup window is the Guest Session's 24 h, minus the Collected rule.
+    const expired =
+      order && this.clock.now() >= GuestSessionPolicy.expiresAt(order.placedAt);
+    if (!order || expired) {
+      throw new DomainError('ORDER_NOT_FOUND', 'Order not found');
+    }
+    return toGuestView(order);
+  }
+
   /** Inserts the Order, retrying with a new reference on a `P2002`. */
   private async insert(
     guestName: string,

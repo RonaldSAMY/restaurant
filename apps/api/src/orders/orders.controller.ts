@@ -4,6 +4,7 @@ import {
   Get,
   Header,
   HttpCode,
+  Param,
   Post,
   Req,
   Res,
@@ -14,6 +15,7 @@ import {
   type GuestOrderView,
   PlaceOrderRequestSchema,
 } from '@restaurant/shared';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 import { readCookie } from '../common/cookies';
@@ -26,7 +28,20 @@ import { OrdersService } from './orders.service';
 /** Body DTO of `POST /api/v1/orders`. */
 class PlaceOrderDto extends createZodDto(PlaceOrderRequestSchema) {}
 
-/** Guest Order endpoints. No guest route takes an Order id or reference. */
+/**
+ * Throttle of reference lookups: 30 per 60 s per client IP, failed lookups
+ * included. Shared with `order.subscribe` (Epic 3), which validates
+ * references the same way. `ThrottlerGuard` counts per handler, so sharing
+ * the config does not share the budget.
+ */
+export const REFERENCE_LOOKUP_THROTTLE = {
+  default: { limit: 30, ttl: 60_000 },
+};
+
+/**
+ * Guest Order endpoints. No guest route takes an Order id; only the public,
+ * throttled lookup takes a reference.
+ */
 @Controller(ApiRoutes.orders)
 export class OrdersController {
   /** Receives the Orders service. */
@@ -67,5 +82,18 @@ export class OrdersController {
       throw new DomainError('UNAUTHENTICATED', 'Authentication required');
     }
     return this.orders.current(principal.orderId);
+  }
+
+  /**
+   * Returns the Guest view of the Order with `reference` (any letter case)
+   * within 24 h of placement. Unknown and expired references get the same 404.
+   */
+  @Public()
+  @Get('by-reference/:reference')
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(ThrottlerGuard)
+  @Throttle(REFERENCE_LOOKUP_THROTTLE)
+  byReference(@Param('reference') reference: string): Promise<GuestOrderView> {
+    return this.orders.byReference(reference);
   }
 }

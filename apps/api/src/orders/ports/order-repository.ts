@@ -44,4 +44,7 @@ export abstract class OrderRepository {
 
   /** Returns the Order with its items in basket order, or `null`. */
   abstract findById(id: string): Promise<StoredOrder | null>;
+
+  /** Returns the Order with `reference` (exact match) and its items, or `null`. */
+  abstract findByReference(reference: string): Promise<StoredOrder | null>;
 }

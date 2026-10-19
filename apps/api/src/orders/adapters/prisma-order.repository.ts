@@ -41,4 +41,12 @@ export class PrismaOrderRepository extends OrderRepository {
       include: ITEMS_IN_ORDER,
     });
   }
+
+  /** Returns the Order with `reference` and its items, or `null`. */
+  findByReference(reference: string): Promise<StoredOrder | null> {
+    return this.prisma.order.findUnique({
+      where: { reference },
+      include: ITEMS_IN_ORDER,
+    });
+  }
 }

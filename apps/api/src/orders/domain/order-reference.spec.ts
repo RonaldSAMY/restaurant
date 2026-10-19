@@ -18,3 +18,16 @@ describe('OrderReference.generate', () => {
     expect(new Set(draws).size).toBeGreaterThanOrEqual(draws.length - 2);
   });
 });
+
+describe('OrderReference.normalize', () => {
+  it('upper-cases a reference in any letter case', () => {
+    expect(OrderReference.normalize('ab12Cd')).toBe('AB12CD');
+  });
+
+  it.each(['', 'ABC12', 'ABC1234', 'AB-12C', 'abcdß', 'ÄBC123'])(
+    'rejects %j',
+    (input) => {
+      expect(OrderReference.normalize(input)).toBeNull();
+    },
+  );
+});

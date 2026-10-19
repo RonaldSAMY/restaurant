@@ -140,3 +140,7 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-staff-login-refresh-and-logout-api.md`
   summary: The seed entry point (`apps/api/src/seed/seed.ts`: `parseEnv(SeedEnvSchema)` + `seedStaff` call) is never executed by tests or CI, so dropping or mis-wiring the staff upsert ships green with no staff login.
   evidence: CI only checks `dist/seed/seed.js` exists; tests call `seedStaff`/`seedMenu` directly. Settle with a CI step that runs the compose `seed` service and asserts a `StaffUser` row.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-track-by-order-reference-api.md`
+  summary: Move `ThrottlerModule.forRoot` out of `AuthModule` (e.g. a `common` throttle module imported by auth and orders) so the orders lookup throttle does not depend on AuthModule.
+  evidence: `REFERENCE_LOOKUP_THROTTLE` overrides the `default` throttler registered only in `auth.module.ts`. Moving it to `AppModule` crashed `SeedModule`, which boots `AuthModule` alone (menu.int-spec SIGABRT).
