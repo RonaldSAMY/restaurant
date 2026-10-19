@@ -115,3 +115,45 @@ button {
   margin: 0;
   font-size: 0.875rem;
 }
+
+.order-status {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.5rem 0;
+}
+
+.order-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.order-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.order-reference {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+}
+
+.lookup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 2rem;
+}
+
+.lookup-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lookup input {
+  flex: 1;
+  min-width: 0;
+  text-transform: uppercase;
+}

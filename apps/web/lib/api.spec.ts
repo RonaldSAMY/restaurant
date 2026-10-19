@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { placeOrder } from './api';
+import { getCurrentOrder, getOrderByReference, placeOrder } from './api';
 
 /** A valid place-order body. */
 const request = {
@@ -91,5 +91,25 @@ describe('placeOrder', () => {
       ok: false,
       error: { code: 'INTERNAL' },
     });
+  });
+});
+
+describe('Order GETs', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ['getCurrentOrder', () => getCurrentOrder(), '/api/v1/orders/current'],
+    [
+      'getOrderByReference',
+      () => getOrderByReference('ab 1/'),
+      '/api/v1/orders/by-reference/ab%201%2F',
+    ],
+  ])('%s GETs %s and parses the Guest view', async (_, call, path) => {
+    const fetchMock = vi.fn(() => Promise.resolve(Response.json(view)));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(call()).resolves.toEqual({ ok: true, data: view });
+    expect(fetchMock).toHaveBeenCalledWith(path, expect.anything());
   });
 });

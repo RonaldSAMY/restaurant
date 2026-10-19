@@ -1,12 +1,13 @@
 import { fetchMenu } from '../lib/menu';
 import { OrderMenu } from './order-menu';
+import { LookupForm } from './lookup-form';
 
 /** Render per request so the Menu is always fresh from the api. */
 export const dynamic = 'force-dynamic';
 
 /**
  * Public Menu page: categories in api order, each with its Menu Items, and
- * the basket that places an Order.
+ * the basket that places an Order, and the lookup for an existing one.
  */
 export default async function HomePage() {
   const menu = await fetchMenu();
@@ -23,6 +24,7 @@ export default async function HomePage() {
       ) : (
         <OrderMenu categories={menu.categories} />
       )}
+      <LookupForm />
     </main>
   );
 }

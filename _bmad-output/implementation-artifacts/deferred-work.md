@@ -148,3 +148,10 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-place-an-order-from-the-menu-page.md`
   summary: Cover the basket submit flow end to end (success navigates to /track, inline errors, 409 link, double-submit guard) in Story 3.5's e2e tests.
   evidence: The web unit tests run in node with no DOM lib, so `OrderMenu.submit()` and non-empty basket rendering are only covered by the pure-helper tests and a manual 375 px check.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-5-order-tracking-pages.md`
+  summary: Cover the tracking pages' client branches (401 → `/` redirect, error render, LookupForm validation) in 3.5's e2e tests.
+  evidence: Web unit tests run without a DOM lib, so `TrackedOrder`'s effect and `LookupForm` submit are only checked live.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-5-order-tracking-pages.md`
+  summary: When 3.4 adds live status updates, make `.order-status` an `aria-live="polite"` region so changes are announced.
+  evidence: The status is a one-time snapshot today. Live changes would be silent to screen readers.

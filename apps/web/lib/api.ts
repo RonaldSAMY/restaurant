@@ -66,3 +66,18 @@ export function placeOrder(
     body: JSON.stringify(body),
   });
 }
+
+/** `GET /api/v1/orders/current`: the Guest Session's Order, or 401. */
+export function getCurrentOrder(): Promise<ApiResult<GuestOrderView>> {
+  return request(`${apiPath(ApiRoutes.orders)}/current`, GuestOrderViewSchema);
+}
+
+/** `GET /api/v1/orders/by-reference/:reference`: any case, within 24 h. */
+export function getOrderByReference(
+  reference: string,
+): Promise<ApiResult<GuestOrderView>> {
+  return request(
+    `${apiPath(ApiRoutes.orders)}/by-reference/${encodeURIComponent(reference)}`,
+    GuestOrderViewSchema,
+  );
+}
